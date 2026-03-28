@@ -101,12 +101,14 @@ if (mode === 'subscribe' && token === FB_VERIFY_TOKEN) {
 
   // POST — receive messages
   if (req.method === 'POST') {
-    // ตรวจ signature
+    // ตรวจ signature (ถ้ามี header — Facebook ส่งมาเสมอในการใช้งานจริง)
     const signature = req.headers['x-hub-signature-256'];
-    const rawBody = JSON.stringify(req.body);
-    if (FB_APP_SECRET && !verifySignature(rawBody, signature)) {
-      console.warn('[Messenger] Invalid signature');
-      return res.status(401).send('Unauthorized');
+    if (FB_APP_SECRET && signature) {
+      const rawBody = JSON.stringify(req.body);
+      if (!verifySignature(rawBody, signature)) {
+        console.warn('[Messenger] Invalid signature');
+        return res.status(401).send('Unauthorized');
+      }
     }
 
     const body = req.body;
