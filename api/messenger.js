@@ -22,22 +22,34 @@ function verifySignature(rawBody, signature) {
   return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
 }
 
-// ส่งข้อความกลับผ่าน Send API
+// ส่งข้อความกลับผ่าน Send API (returns Promise)
 function sendMessage(recipientId, text, pageToken) {
-  const body = JSON.stringify({
-    recipient: { id: recipientId },
-    message: { text: text.slice(0, 2000) },
-  });
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify({
+      recipient: { id: recipientId },
+      message: { text: text.slice(0, 2000) },
+    });
 
-  const req = https.request({
-    hostname: 'graph.facebook.com',
-    path: `/v19.0/me/messages?access_token=${pageToken}`,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    const req = https.request({
+      hostname: 'graph.facebook.com',
+      path: `/v19.0/me/messages?access_token=${pageToken}`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => (data += chunk));
+      res.on('end', () => {
+        console.log(`[Messenger] Send API response (${res.statusCode}):`, data.slice(0, 200));
+        resolve(data);
+      });
+    });
+    req.on('error', (err) => {
+      console.error('[Messenger] Send error:', err.message);
+      reject(err);
+    });
+    req.write(payload);
+    req.end();
   });
-  req.on('error', (err) => console.error('[Messenger] Send error:', err.message));
-  req.write(body);
-  req.end();
 }
 
 // แสดง typing indicator
@@ -136,7 +148,7 @@ if (mode === 'subscribe' && token === FB_VERIFY_TOKEN) {
 
           const { hasHandoff, type, cleanText } = checkHandoff(aiResponse);
 
-          sendMessage(psid, cleanText, pageToken);
+          await sendMessage(psid, cleanText, pageToken);
 
           if (hasHandoff) {
             triggerHandoff({
