@@ -4,8 +4,13 @@ const { getAIResponse, checkHandoff } = require('./lib/ai');
 const { triggerHandoff } = require('./lib/handoff');
 
 const FB_VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN || 'jia_chatbot_verify_2026';
-const FB_PAGE_ACCESS_TOKEN = process.env.FB_PAGE_ACCESS_TOKEN;
 const FB_APP_SECRET = process.env.FB_APP_SECRET;
+
+// Map page ID → access token
+const PAGE_TOKENS = {
+  '115768024942069': process.env.FB_PAGE_ACCESS_TOKEN_JIA_CPR,       // Jia CPR
+  '1032110679988495': process.env.FB_PAGE_ACCESS_TOKEN_JIA_TRAINING, // Jia Training Center
+};
 
 // ตรวจ signature จาก Facebook
 function verifySignature(rawBody, signature) {
@@ -18,15 +23,15 @@ function verifySignature(rawBody, signature) {
 }
 
 // ส่งข้อความกลับผ่าน Send API
-function sendMessage(recipientId, text) {
+function sendMessage(recipientId, text, pageToken) {
   const body = JSON.stringify({
     recipient: { id: recipientId },
-    message: { text: text.slice(0, 2000) }, // Messenger limit 2000 chars
+    message: { text: text.slice(0, 2000) },
   });
 
   const req = https.request({
     hostname: 'graph.facebook.com',
-    path: `/v19.0/me/messages?access_token=${FB_PAGE_ACCESS_TOKEN}`,
+    path: `/v19.0/me/messages?access_token=${pageToken}`,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
@@ -36,14 +41,14 @@ function sendMessage(recipientId, text) {
 }
 
 // แสดง typing indicator
-function sendTypingOn(recipientId) {
+function sendTypingOn(recipientId, pageToken) {
   const body = JSON.stringify({
     recipient: { id: recipientId },
     sender_action: 'typing_on',
   });
   const req = https.request({
     hostname: 'graph.facebook.com',
-    path: `/v19.0/me/messages?access_token=${FB_PAGE_ACCESS_TOKEN}`,
+    path: `/v19.0/me/messages?access_token=${pageToken}`,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
@@ -53,12 +58,12 @@ function sendTypingOn(recipientId) {
 }
 
 // ดึงชื่อลูกค้าจาก Facebook Profile
-function getUserName(psid) {
+function getUserName(psid, pageToken) {
   return new Promise((resolve) => {
     const req = https.request(
       {
         hostname: 'graph.facebook.com',
-        path: `/v19.0/${psid}?fields=name&access_token=${FB_PAGE_ACCESS_TOKEN}`,
+        path: `/v19.0/${psid}?fields=name&access_token=${pageToken}`,
         method: 'GET',
       },
       (res) => {
@@ -109,22 +114,29 @@ module.exports = async (req, res) => {
 
     // ประมวลผล event
     for (const entry of body.entry || []) {
+      const pageId = entry.id;
+      const pageToken = PAGE_TOKENS[pageId];
+      if (!pageToken) {
+        console.warn('[Messenger] ไม่มี token สำหรับ page:', pageId);
+        continue;
+      }
+
       for (const event of entry.messaging || []) {
         if (!event.message?.text) continue;
 
         const psid = event.sender.id;
         const messageText = event.message.text;
 
-        sendTypingOn(psid);
+        sendTypingOn(psid, pageToken);
 
         const [aiResponse, customerName] = await Promise.all([
           getAIResponse(psid, messageText),
-          getUserName(psid),
+          getUserName(psid, pageToken),
         ]);
 
         const { hasHandoff, type, cleanText } = checkHandoff(aiResponse);
 
-        sendMessage(psid, cleanText);
+        sendMessage(psid, cleanText, pageToken);
 
         if (hasHandoff) {
           triggerHandoff({
