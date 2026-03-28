@@ -87,14 +87,19 @@ function getUserName(psid, pageToken) {
 module.exports = async (req, res) => {
   // GET — webhook verification
   if (req.method === 'GET') {
-    const { searchParams } = new URL(req.url, 'https://jia-chatbot.vercel.app');
-    const mode = searchParams.get('hub.mode');
-    const token = searchParams.get('hub.verify_token');
-    const challenge = searchParams.get('hub.challenge');
+    // ลอง parse หลายวิธี
+    const rawUrl = req.url || '';
+    const qs = rawUrl.includes('?') ? rawUrl.split('?')[1] : '';
+    const params = new URLSearchParams(qs);
+    const mode = params.get('hub.mode') || (req.query && req.query['hub.mode']);
+    const token = params.get('hub.verify_token') || (req.query && req.query['hub.verify_token']);
+    const challenge = params.get('hub.challenge') || (req.query && req.query['hub.challenge']);
     if (mode === 'subscribe' && token === FB_VERIFY_TOKEN) {
       console.log('[Messenger] Webhook verified');
       return res.status(200).send(challenge);
     }
+    // debug log
+    console.log('[Messenger] Verify failed — url:', rawUrl, 'mode:', mode, 'token:', token, 'expected:', FB_VERIFY_TOKEN);
     return res.status(403).send('Forbidden');
   }
 
