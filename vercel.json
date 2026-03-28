@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "routes": [
+    { "src": "/api/messenger", "dest": "/api/messenger.js" },
+    { "src": "/api/line", "dest": "/api/line.js" },
+    { "src": "/(.*)", "dest": "/api/index.js" }
+  ]
+}
