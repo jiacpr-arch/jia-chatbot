@@ -87,9 +87,10 @@ function getUserName(psid, pageToken) {
 module.exports = async (req, res) => {
   // GET — webhook verification
   if (req.method === 'GET') {
-    const mode = req.query['hub.mode'];
-    const token = req.query['hub.verify_token'];
-    const challenge = req.query['hub.challenge'];
+    const { searchParams } = new URL(req.url, 'https://jia-chatbot.vercel.app');
+    const mode = searchParams.get('hub.mode');
+    const token = searchParams.get('hub.verify_token');
+    const challenge = searchParams.get('hub.challenge');
     if (mode === 'subscribe' && token === FB_VERIFY_TOKEN) {
       console.log('[Messenger] Webhook verified');
       return res.status(200).send(challenge);
