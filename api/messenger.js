@@ -93,11 +93,7 @@ module.exports = async (req, res) => {
     const mode = params.get('hub.mode') || (req.query && req.query['hub.mode']);
     const token = params.get('hub.verify_token') || (req.query && req.query['hub.verify_token']);
     const challenge = params.get('hub.challenge') || (req.query && req.query['hub.challenge']);
-    // DEBUG — ลบออกหลังทดสอบ
-    if (rawUrl.includes('debug')) {
-      return res.status(200).json({ rawUrl, mode, token, expected: FB_VERIFY_TOKEN, match: token === FB_VERIFY_TOKEN });
-    }
-    if (mode === 'subscribe' && token === FB_VERIFY_TOKEN) {
+if (mode === 'subscribe' && token === FB_VERIFY_TOKEN) {
       return res.status(200).send(challenge);
     }
     return res.status(403).send('Forbidden');
