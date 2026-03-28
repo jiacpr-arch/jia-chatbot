@@ -104,45 +104,54 @@ if (mode === 'subscribe' && token === FB_VERIFY_TOKEN) {
     // TODO: เพิ่ม raw body signature verification ในอนาคต
 
     const body = req.body;
+    console.log('[Messenger] Received:', JSON.stringify(body).slice(0, 500));
+
     if (body.object !== 'page') return res.status(200).send('OK');
 
-    res.status(200).send('EVENT_RECEIVED'); // ตอบ Facebook ทันที
+    // ประมวลผล event ให้เสร็จก่อนตอบ Facebook (Vercel จะ kill function หลัง res.send)
+    try {
+      for (const entry of body.entry || []) {
+        const pageId = entry.id;
+        const pageToken = PAGE_TOKENS[pageId];
+        if (!pageToken) {
+          console.warn('[Messenger] ไม่มี token สำหรับ page:', pageId);
+          continue;
+        }
 
-    // ประมวลผล event
-    for (const entry of body.entry || []) {
-      const pageId = entry.id;
-      const pageToken = PAGE_TOKENS[pageId];
-      if (!pageToken) {
-        console.warn('[Messenger] ไม่มี token สำหรับ page:', pageId);
-        continue;
-      }
+        for (const event of entry.messaging || []) {
+          if (!event.message?.text) continue;
 
-      for (const event of entry.messaging || []) {
-        if (!event.message?.text) continue;
+          const psid = event.sender.id;
+          const messageText = event.message.text;
+          console.log(`[Messenger] Message from ${psid}: ${messageText}`);
 
-        const psid = event.sender.id;
-        const messageText = event.message.text;
+          sendTypingOn(psid, pageToken);
 
-        sendTypingOn(psid, pageToken);
+          const [aiResponse, customerName] = await Promise.all([
+            getAIResponse(psid, messageText),
+            getUserName(psid, pageToken),
+          ]);
 
-        const [aiResponse, customerName] = await Promise.all([
-          getAIResponse(psid, messageText),
-          getUserName(psid, pageToken),
-        ]);
+          console.log(`[Messenger] AI response: ${aiResponse.slice(0, 200)}`);
 
-        const { hasHandoff, type, cleanText } = checkHandoff(aiResponse);
+          const { hasHandoff, type, cleanText } = checkHandoff(aiResponse);
 
-        sendMessage(psid, cleanText, pageToken);
+          sendMessage(psid, cleanText, pageToken);
 
-        if (hasHandoff) {
-          triggerHandoff({
-            customerName,
-            platform: 'Facebook Messenger',
-            question: messageText,
-            handoffType: type,
-          }).catch(console.error);
+          if (hasHandoff) {
+            triggerHandoff({
+              customerName,
+              platform: 'Facebook Messenger',
+              question: messageText,
+              handoffType: type,
+            }).catch(console.error);
+          }
         }
       }
+    } catch (err) {
+      console.error('[Messenger] Error processing:', err.message || err);
     }
+
+    return res.status(200).send('EVENT_RECEIVED');
   }
 };
