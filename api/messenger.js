@@ -32,7 +32,7 @@ function sendMessage(recipientId, text, pageToken) {
 
     const req = https.request({
       hostname: 'graph.facebook.com',
-      path: `/v19.0/me/messages?access_token=${pageToken}`,
+      path: `/v19.0/me/messages?access_token=${encodeURIComponent(pageToken)}`,
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
     }, (res) => {
@@ -60,7 +60,7 @@ function sendTypingOn(recipientId, pageToken) {
   });
   const req = https.request({
     hostname: 'graph.facebook.com',
-    path: `/v19.0/me/messages?access_token=${pageToken}`,
+    path: `/v19.0/me/messages?access_token=${encodeURIComponent(pageToken)}`,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
@@ -75,7 +75,7 @@ function getUserName(psid, pageToken) {
     const req = https.request(
       {
         hostname: 'graph.facebook.com',
-        path: `/v19.0/${psid}?fields=name&access_token=${pageToken}`,
+        path: `/v19.0/${psid}?fields=name&access_token=${encodeURIComponent(pageToken)}`,
         method: 'GET',
       },
       (res) => {
