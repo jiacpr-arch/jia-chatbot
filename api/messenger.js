@@ -3,6 +3,7 @@ const https = require('https');
 const { getAIResponse, checkHandoff } = require('./lib/ai');
 const { triggerHandoff } = require('./lib/handoff');
 const { leadStore } = require('./lib/lead-store');
+const { logLeadToSheet } = require('./lib/sheets');
 
 const FB_VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN || 'jia_chatbot_verify_2026';
 const FB_APP_SECRET = process.env.FB_APP_SECRET;
@@ -150,6 +151,7 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
 
     case 'HOT_LEAD':
       leadStore.update(psid, { level: 'hot', timing: text });
+      logLeadToSheet({ name: customerName, psid, type: lead?.type || 'individual', level: 'hot', timing: text, source: 'messenger_bot' }).catch(console.error);
       await sendText(psid,
         `เยี่ยมเลยค่ะ! 🎉\n\nจองคอร์สได้เลย:\n👉 แอดไลน์ @jiacpr (ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n👉 เว็บ www.jiacpr.com\n\n💡 เรียนออนไลน์ฟรีก่อนที่ jiacpr.com/online แล้วมาเรียน hands-on ลดเหลือ ฿400 ค่ะ!\n\nมีคำถามเพิ่มเติมพิมพ์ถามได้เลยนะคะ`,
         pageToken);
@@ -187,6 +189,7 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
 
     case 'CORP_LARGE':
       leadStore.update(psid, { level: 'hot', corpSize: '15+' });
+      logLeadToSheet({ name: customerName, psid, type: 'corporate', level: 'hot', corpSize: '15+', source: 'messenger_bot' }).catch(console.error);
       await sendText(psid,
         `รับทราบค่ะ! สำหรับ 15 คนขึ้นไปทีมงานจะจัดแพ็กเกจพิเศษให้ค่ะ\nขอส่งต่อให้ทีมติดต่อกลับเพื่อเสนอราคาที่เหมาะสมนะคะ 🙏`,
         pageToken);
@@ -195,6 +198,7 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
 
     case 'AED_CALLBACK':
       leadStore.update(psid, { level: 'hot' });
+      logLeadToSheet({ name: customerName, psid, type: 'aed', level: 'hot', message: 'ขอให้โทรกลับ AED', source: 'messenger_bot' }).catch(console.error);
       await sendText(psid,
         `รับทราบค่ะ! ทีมงานจะโทรกลับภายใน 1 ชม. นะคะ 📞\nขอบคุณที่สนใจค่ะ 🙏`,
         pageToken);
@@ -210,6 +214,7 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
 
     case 'WANT_BOOKING':
       leadStore.update(psid, { level: 'hot' });
+      logLeadToSheet({ name: customerName, psid, type: lead?.type || 'individual', level: 'hot', message: 'สนใจจอง', source: 'messenger_bot' }).catch(console.error);
       await sendText(psid,
         `เยี่ยมเลยค่ะ! 🎉 จองได้เลย:\n\n👉 แอดไลน์ @jiacpr (แนะนำ — ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n👉 เว็บ www.jiacpr.com\n\nทีมงานพร้อมช่วยดูแลค่ะ!`,
         pageToken);
