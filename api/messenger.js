@@ -96,7 +96,18 @@ function getUserName(psid, pageToken) {
   });
 }
 
+// Shared log for debugging
+global._webhookLog = global._webhookLog || [];
+
 module.exports = async (req, res) => {
+  global._webhookLog.push({
+    time: new Date().toISOString(),
+    method: req.method,
+    url: req.url,
+    body: req.method === 'POST' ? JSON.stringify(req.body).slice(0, 300) : undefined,
+  });
+  if (global._webhookLog.length > 20) global._webhookLog.shift();
+
   // GET — webhook verification
   if (req.method === 'GET') {
     const rawUrl = req.url || '';

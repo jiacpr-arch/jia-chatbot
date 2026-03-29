@@ -1,5 +1,9 @@
 const https = require('https');
 
+// In-memory log of recent requests to /api/messenger
+// This helps verify if Facebook is actually sending webhooks
+global._webhookLog = global._webhookLog || [];
+
 function fbGet(path, token) {
   return new Promise((resolve, reject) => {
     const req = https.request({
@@ -19,26 +23,47 @@ function fbGet(path, token) {
 }
 
 module.exports = async (req, res) => {
+  const cprToken = process.env.FB_PAGE_ACCESS_TOKEN_JIA_CPR || '';
+
+  // If ?send=PSID, try to send a test message directly
+  const sendTo = req.query?.send;
+  if (sendTo) {
+    const result = await new Promise((resolve, reject) => {
+      const payload = JSON.stringify({
+        recipient: { id: sendTo },
+        message: { text: 'ทดสอบจาก JIA Chatbot 🤖' },
+      });
+      const r = https.request({
+        hostname: 'graph.facebook.com',
+        path: `/v19.0/me/messages?access_token=${encodeURIComponent(cprToken)}`,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+      }, (resp) => {
+        let data = '';
+        resp.on('data', (chunk) => (data += chunk));
+        resp.on('end', () => {
+          try { resolve(JSON.parse(data)); } catch { resolve(data); }
+        });
+      });
+      r.on('error', reject);
+      r.write(payload);
+      r.end();
+    });
+    return res.json({ send_result: result });
+  }
+
   try {
-    const cprToken = process.env.FB_PAGE_ACCESS_TOKEN_JIA_CPR || '';
-    const trainingToken = process.env.FB_PAGE_ACCESS_TOKEN_JIA_TRAINING || '';
-
-    // Check subscribed apps for Jia CPR page
-    const subs = await fbGet('115768024942069/subscribed_apps', cprToken);
-
-    // Check page info
     const pageInfo = await fbGet('me?fields=id,name', cprToken);
-
-    // Check token permissions
-    const debugToken = await fbGet(`debug_token?input_token=${encodeURIComponent(cprToken)}`, cprToken);
 
     res.json({
       page_info: pageInfo,
-      subscriptions: subs,
-      token_debug: debugToken,
-      cpr_token_preview: cprToken.slice(0, 20) + '...',
-      cpr_token_length: cprToken.length,
-      training_token_length: trainingToken.length,
+      webhook_log: global._webhookLog.slice(-10),
+      env_check: {
+        has_anthropic_key: !!(process.env.ANTHROPIC_API_KEY || '').match(/^sk-ant-/),
+        has_cpr_token: cprToken.length > 0 && cprToken.startsWith('EAA'),
+        has_training_token: (process.env.FB_PAGE_ACCESS_TOKEN_JIA_TRAINING || '').startsWith('EAA'),
+        has_app_secret: !!(process.env.FB_APP_SECRET || ''),
+      },
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
