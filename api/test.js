@@ -22,6 +22,27 @@ function fbGet(path, token) {
   });
 }
 
+function fbPost(path, body, token) {
+  return new Promise((resolve, reject) => {
+    const payload = `${body}&access_token=${encodeURIComponent(token)}`;
+    const req = https.request({
+      hostname: 'graph.facebook.com',
+      path: `/v19.0/${path}`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(payload) },
+    }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => (data += chunk));
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); } catch { resolve(data); }
+      });
+    });
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
 module.exports = async (req, res) => {
   const cprToken = process.env.FB_PAGE_ACCESS_TOKEN_JIA_CPR || '';
 
@@ -50,6 +71,22 @@ module.exports = async (req, res) => {
       r.end();
     });
     return res.json({ send_result: result });
+  }
+
+  // If ?subscribe=1, subscribe pages to webhook
+  if (req.query?.subscribe) {
+    const trainingToken = process.env.FB_PAGE_ACCESS_TOKEN_JIA_TRAINING || '';
+    const results = {};
+
+    // Subscribe Jia CPR
+    results.jia_cpr = await fbPost('115768024942069/subscribed_apps',
+      'subscribed_fields=messages,messaging_postbacks', cprToken);
+
+    // Subscribe Jia Training
+    results.jia_training = await fbPost('1032110679988495/subscribed_apps',
+      'subscribed_fields=messages,messaging_postbacks', trainingToken);
+
+    return res.json({ subscribe_results: results });
   }
 
   try {
