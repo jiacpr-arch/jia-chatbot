@@ -29,10 +29,13 @@ module.exports = async (req, res) => {
     // Check page info
     const pageInfo = await fbGet('me?fields=id,name', cprToken);
 
-    // Try to subscribe the app (POST via GET won't work, but let's check status)
+    // Check token permissions
+    const debugToken = await fbGet(`debug_token?input_token=${encodeURIComponent(cprToken)}`, cprToken);
+
     res.json({
       page_info: pageInfo,
       subscriptions: subs,
+      token_debug: debugToken,
       cpr_token_preview: cprToken.slice(0, 20) + '...',
       cpr_token_length: cprToken.length,
       training_token_length: trainingToken.length,
