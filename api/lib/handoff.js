@@ -8,6 +8,8 @@ const HANDOFF_TYPE_LABELS = {
   PAYMENT: 'การชำระเงิน / สลิป',
   HUMAN_REQUEST: 'ลูกค้าขอคุยกับคน',
   SCHEDULE: 'ถามรอบเรียนเฉพาะเจาะจง',
+  HOT_LEAD: '🔥 Lead พร้อมจอง',
+  AED_CALLBACK: '📞 ขอให้โทรกลับเรื่อง AED',
 };
 
 /**
