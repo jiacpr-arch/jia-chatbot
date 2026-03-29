@@ -4,7 +4,7 @@ function fbGet(path, token) {
   return new Promise((resolve, reject) => {
     const req = https.request({
       hostname: 'graph.facebook.com',
-      path: `/v19.0/${path}${path.includes('?') ? '&' : '?'}access_token=${token}`,
+      path: `/v19.0/${path}${path.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}`,
       method: 'GET',
     }, (res) => {
       let data = '';
