@@ -304,7 +304,7 @@ module.exports = async (req, res) => {
 
           // Fall through to AI for free-text conversation
           onUserReply(psid);
-          const aiResponse = await getAIResponse(psid, text);
+          const aiResponse = await getAIResponse(psid, text, lead?.level || null);
           const { hasHandoff, type, cleanText } = checkHandoff(aiResponse);
 
           await sendText(psid, cleanText, pageToken);

@@ -109,7 +109,7 @@ module.exports = async (req, res) => {
       const replyToken = event.replyToken;
 
       const [aiResponse, customerName] = await Promise.all([
-        getAIResponse(userId, messageText),
+        getAIResponse(userId, messageText, null),
         getUserProfile(userId),
       ]);
 

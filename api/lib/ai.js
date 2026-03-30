@@ -10,6 +10,12 @@ const conversationHistory = new Map();
 const HISTORY_TTL_MS = 30 * 60 * 1000; // 30 นาที
 const MAX_HISTORY_MESSAGES = 20; // เก็บไว้ 20 ข้อความล่าสุด
 
+const MODEL_HAIKU = 'claude-haiku-4-5-20251001';
+const MODEL_SONNET = 'claude-sonnet-4-6-20250520';
+
+// จำนวนข้อความขั้นต่ำที่จะสลับไป Sonnet (ลูกค้าคุยจริงจัง)
+const SONNET_THRESHOLD_MESSAGES = 3;
+
 function getHistory(userId) {
   const record = conversationHistory.get(userId);
   if (!record) return [];
@@ -29,12 +35,28 @@ function saveHistory(userId, messages) {
 }
 
 /**
+ * เลือกโมเดลตามความจริงจังของลูกค้า
+ * - คุยเกิน 3 ข้อความ → Sonnet (ปิดการขาย)
+ * - lead level เป็น hot/warm → Sonnet
+ * - นอกนั้น → Haiku (เร็ว ถูก)
+ */
+function chooseModel(history, leadLevel) {
+  const userMessageCount = history.filter((m) => m.role === 'user').length;
+
+  if (userMessageCount >= SONNET_THRESHOLD_MESSAGES) return MODEL_SONNET;
+  if (leadLevel === 'hot' || leadLevel === 'warm') return MODEL_SONNET;
+
+  return MODEL_HAIKU;
+}
+
+/**
  * ส่งข้อความไปให้ Claude และได้รับคำตอบ
  * @param {string} userId - ID ผู้ใช้ (Messenger PSID หรือ LINE userId)
  * @param {string} userMessage - ข้อความจากผู้ใช้
+ * @param {string|null} leadLevel - ระดับ lead (hot/warm/cold/null)
  * @returns {Promise<string>} - คำตอบจาก AI
  */
-async function getAIResponse(userId, userMessage) {
+async function getAIResponse(userId, userMessage, leadLevel) {
   const history = getHistory(userId);
 
   const messages = [
@@ -42,9 +64,12 @@ async function getAIResponse(userId, userMessage) {
     { role: 'user', content: userMessage },
   ];
 
+  const model = chooseModel(history, leadLevel);
+  console.log(`[AI] ${userId}: using ${model === MODEL_SONNET ? 'Sonnet (closing)' : 'Haiku (fast)'}`);
+
   const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 500,
+    model,
+    max_tokens: model === MODEL_SONNET ? 700 : 500,
     system: SYSTEM_PROMPT,
     messages,
   });
