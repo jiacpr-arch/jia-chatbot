@@ -1,7 +1,12 @@
 const https = require('https');
-const { getReadyMessages } = require('../lib/follow-up');
+const { getReadyMessages, markSent } = require('../lib/follow-up');
 
 const CRON_SECRET = process.env.CRON_SECRET || '';
+
+const PAGE_TOKENS = {
+  '115768024942069': process.env.FB_PAGE_ACCESS_TOKEN_JIA_CPR,
+  '1032110679988495': process.env.FB_PAGE_ACCESS_TOKEN_JIA_TRAINING,
+};
 
 // ส่งข้อความผ่าน Send API (with optional message tag for outside 24hr)
 function sendFollowUp(psid, text, pageToken, tag) {
@@ -36,13 +41,16 @@ module.exports = async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const messages = getReadyMessages();
+  const messages = await getReadyMessages();
   console.log(`[Cron] Follow-up check: ${messages.length} messages to send`);
 
   let sent = 0;
   for (const msg of messages) {
     const ok = await sendFollowUp(msg.psid, msg.message, msg.pageToken, msg.tag);
-    if (ok) sent++;
+    if (ok) {
+      await markSent(msg.id, msg.index);
+      sent++;
+    }
   }
 
   return res.json({
