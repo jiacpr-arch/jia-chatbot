@@ -22,7 +22,7 @@ function fbSend(payload, pageToken) {
     const body = JSON.stringify(payload);
     const req = https.request({
       hostname: 'graph.facebook.com',
-      path: `/v19.0/me/messages?access_token=${encodeURIComponent(pageToken)}`,
+      path: `/v21.0/me/messages?access_token=${encodeURIComponent(pageToken)}`,
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
     }, (res) => {
@@ -68,7 +68,7 @@ function getUserName(psid, pageToken) {
   return new Promise((resolve) => {
     const req = https.request({
       hostname: 'graph.facebook.com',
-      path: `/v19.0/${psid}?fields=name&access_token=${encodeURIComponent(pageToken)}`,
+      path: `/v21.0/${psid}?fields=name&access_token=${encodeURIComponent(pageToken)}`,
       method: 'GET',
     }, (res) => {
       let data = '';

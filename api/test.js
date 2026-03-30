@@ -8,7 +8,7 @@ function fbGet(path, token) {
   return new Promise((resolve, reject) => {
     const req = https.request({
       hostname: 'graph.facebook.com',
-      path: `/v19.0/${path}${path.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}`,
+      path: `/v21.0/${path}${path.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}`,
       method: 'GET',
     }, (res) => {
       let data = '';
@@ -27,7 +27,7 @@ function fbPost(path, body, token) {
     const payload = `${body}&access_token=${encodeURIComponent(token)}`;
     const req = https.request({
       hostname: 'graph.facebook.com',
-      path: `/v19.0/${path}`,
+      path: `/v21.0/${path}`,
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(payload) },
     }, (res) => {
@@ -56,7 +56,7 @@ module.exports = async (req, res) => {
       });
       const r = https.request({
         hostname: 'graph.facebook.com',
-        path: `/v19.0/me/messages?access_token=${encodeURIComponent(cprToken)}`,
+        path: `/v21.0/me/messages?access_token=${encodeURIComponent(cprToken)}`,
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
       }, (resp) => {
