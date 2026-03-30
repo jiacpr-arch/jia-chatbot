@@ -41,6 +41,7 @@ function fbSend(payload, pageToken) {
 
 function sendText(psid, text, pageToken) {
   return fbSend({
+    messaging_type: 'RESPONSE',
     recipient: { id: psid },
     message: { text: text.slice(0, 2000) },
   }, pageToken);
@@ -48,6 +49,7 @@ function sendText(psid, text, pageToken) {
 
 function sendQuickReply(psid, text, buttons, pageToken) {
   return fbSend({
+    messaging_type: 'RESPONSE',
     recipient: { id: psid },
     message: {
       text: text.slice(0, 2000),
@@ -61,7 +63,7 @@ function sendQuickReply(psid, text, buttons, pageToken) {
 }
 
 function sendTypingOn(psid, pageToken) {
-  fbSend({ recipient: { id: psid }, sender_action: 'typing_on' }, pageToken).catch(() => {});
+  fbSend({ messaging_type: 'RESPONSE', recipient: { id: psid }, sender_action: 'typing_on' }, pageToken).catch(() => {});
 }
 
 function getUserName(psid, pageToken) {

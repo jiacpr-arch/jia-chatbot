@@ -51,6 +51,7 @@ module.exports = async (req, res) => {
   if (sendTo) {
     const result = await new Promise((resolve, reject) => {
       const payload = JSON.stringify({
+        messaging_type: 'RESPONSE',
         recipient: { id: sendTo },
         message: { text: 'ทดสอบจาก JIA Chatbot 🤖' },
       });

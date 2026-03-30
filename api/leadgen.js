@@ -32,6 +32,7 @@ function getLeadData(leadgenId, pageToken) {
 function sendMessage(psid, text, pageToken) {
   return new Promise((resolve) => {
     const payload = JSON.stringify({
+      messaging_type: 'RESPONSE',
       recipient: { id: psid },
       message: { text: text.slice(0, 2000) },
     });

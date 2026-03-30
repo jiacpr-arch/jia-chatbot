@@ -6,9 +6,8 @@ const CRON_SECRET = process.env.CRON_SECRET || '';
 // ส่งข้อความผ่าน Send API (with optional message tag for outside 24hr)
 function sendFollowUp(psid, text, pageToken, tag) {
   return new Promise((resolve) => {
-    const msg = { recipient: { id: psid }, message: { text: text.slice(0, 2000) } };
-    if (tag) msg.messaging_type = 'MESSAGE_TAG';
-    if (tag) msg.tag = tag;
+    const msg = { messaging_type: 'RESPONSE', recipient: { id: psid }, message: { text: text.slice(0, 2000) } };
+    if (tag) { msg.messaging_type = 'MESSAGE_TAG'; msg.tag = tag; }
 
     const payload = JSON.stringify(msg);
     const req = https.request({
