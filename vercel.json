@@ -5,6 +5,13 @@
     { "src": "/api/line", "dest": "/api/line.js" },
     { "src": "/api/test", "dest": "/api/test.js" },
     { "src": "/api/leadgen", "dest": "/api/leadgen.js" },
+    { "src": "/api/cron/follow-up", "dest": "/api/cron/follow-up.js" },
     { "src": "/(.*)", "dest": "/api/index.js" }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/follow-up",
+      "schedule": "0 * * * *"
+    }
   ]
 }

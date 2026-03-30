@@ -4,6 +4,7 @@ const { getAIResponse, checkHandoff } = require('./lib/ai');
 const { triggerHandoff } = require('./lib/handoff');
 const { leadStore } = require('./lib/lead-store');
 const { logLeadToSheet } = require('./lib/sheets');
+const { scheduleFollowUp, cancelFollowUp, onUserReply } = require('./lib/follow-up');
 
 const FB_VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN || 'jia_chatbot_verify_2026';
 const FB_APP_SECRET = process.env.FB_APP_SECRET;
@@ -151,6 +152,7 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
 
     case 'HOT_LEAD':
       leadStore.update(psid, { level: 'hot', timing: text });
+      cancelFollowUp(psid);
       logLeadToSheet({ name: customerName, psid, type: lead?.type || 'individual', level: 'hot', timing: text, source: 'messenger_bot' }).catch(console.error);
       await sendText(psid,
         `เยี่ยมเลยค่ะ! 🎉\n\nจองคอร์สได้เลย:\n👉 แอดไลน์ @jiacpr (ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n👉 เว็บ www.jiacpr.com\n\n💡 เรียนออนไลน์ฟรีก่อนที่ jiacpr.com/online แล้วมาเรียน hands-on ลดเหลือ ฿400 ค่ะ!\n\nมีคำถามเพิ่มเติมพิมพ์ถามได้เลยนะคะ`,
@@ -161,6 +163,7 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
 
     case 'WARM_LEAD':
       leadStore.update(psid, { level: 'warm', timing: text });
+      scheduleFollowUp(psid, pageToken);
       await sendQuickReply(psid,
         `ไม่มีปัญหาค่ะ! 😊\nเดี๋ยวน้องเจียส่งข้อมูลคอร์สและโปรโมชั่นให้ทางนี้นะคะ\n\n💡 ระหว่างนี้ลองเรียนออนไลน์ฟรีก่อนได้ที่ jiacpr.com/online ค่ะ เรียนจบได้คูปองลด ฿100 ด้วย!\n\nพร้อมเมื่อไหร์ทักมาได้เลยค่ะ`,
         YES_NO_BUTTONS, pageToken);
@@ -168,6 +171,7 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
 
     case 'COLD_LEAD':
       leadStore.update(psid, { level: 'cold', timing: 'ยังไม่แน่ใจ' });
+      scheduleFollowUp(psid, pageToken);
       await sendText(psid,
         `ไม่เป็นไรค่ะ! 🙏\n\n💡 แนะนำลองเรียนออนไลน์ฟรีก่อนได้ที่ jiacpr.com/online ค่ะ\nมี 6 บทเรียน เรียนจบได้ใบ cert ออนไลน์ + คูปองลด ฿100 สำหรับคอร์ส hands-on\n\nหรือเพิ่มเพื่อน LINE @jiacpr ไว้ก่อนก็ได้ค่ะ จะได้ไม่พลาดโปร 😊`,
         pageToken);
@@ -214,6 +218,7 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
 
     case 'WANT_BOOKING':
       leadStore.update(psid, { level: 'hot' });
+      cancelFollowUp(psid);
       logLeadToSheet({ name: customerName, psid, type: lead?.type || 'individual', level: 'hot', message: 'สนใจจอง', source: 'messenger_bot' }).catch(console.error);
       await sendText(psid,
         `เยี่ยมเลยค่ะ! 🎉 จองได้เลย:\n\n👉 แอดไลน์ @jiacpr (แนะนำ — ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n👉 เว็บ www.jiacpr.com\n\nทีมงานพร้อมช่วยดูแลค่ะ!`,
@@ -296,6 +301,7 @@ module.exports = async (req, res) => {
           if (handled) continue;
 
           // Fall through to AI for free-text conversation
+          onUserReply(psid);
           const aiResponse = await getAIResponse(psid, text);
           const { hasHandoff, type, cleanText } = checkHandoff(aiResponse);
 
