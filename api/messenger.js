@@ -288,13 +288,17 @@ module.exports = async (req, res) => {
           sendTypingOn(psid, pageToken);
           const customerName = await getUserName(psid, pageToken);
 
-          // First-time user → send welcome with quick replies
+          // First-time user → ตอบคำถามด้วย AI + แนบ Quick Reply buttons
           const lead = leadStore.get(psid);
           if (!lead && !matchButton(text)) {
             leadStore.update(psid, { name: customerName, firstMessage: text });
-            await sendQuickReply(psid,
-              `สวัสดีค่ะ! ยินดีต้อนรับสู่ JIA TRAINER CENTER 🙏\nน้องเจียพร้อมช่วยดูแลค่ะ\n\nคุณสนใจเรื่องไหนคะ?`,
-              WELCOME_BUTTONS, pageToken);
+            onUserReply(psid);
+            const welcomeAI = await getAIResponse(psid, text, null);
+            const { hasHandoff: wHandoff, type: wType, cleanText: wClean } = checkHandoff(welcomeAI);
+            await sendQuickReply(psid, wClean, WELCOME_BUTTONS, pageToken);
+            if (wHandoff) {
+              triggerHandoff({ customerName, platform: 'Facebook Messenger', question: text, handoffType: wType }).catch(console.error);
+            }
             continue;
           }
 
