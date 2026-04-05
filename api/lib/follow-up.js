@@ -119,13 +119,12 @@ const POST_COURSE_SEQUENCE = [
 
 // --- Public API ---
 
-async function scheduleFollowUp(psid, pageToken) {
+async function scheduleFollowUp(psid, pageToken, platform = 'messenger') {
   if (!SUPABASE_KEY) {
     console.log('[FollowUp] No Supabase key, cannot persist follow-up');
     return;
   }
 
-  // ยกเลิก sequence เดิมก่อน (ถ้ามี) แล้วสร้างใหม่
   await supabaseRequest('PATCH',
     `chatbot_followups?psid=eq.${psid}&status=eq.active`,
     { status: 'cancelled' }
@@ -139,30 +138,29 @@ async function scheduleFollowUp(psid, pageToken) {
     last_interaction: new Date().toISOString(),
     status: 'active',
     sequence_type: 'prospect',
+    platform,
   };
 
   await supabaseRequest('POST', 'chatbot_followups', row);
-  console.log(`[FollowUp] Scheduled prospect sequence for ${psid}`);
+  console.log(`[FollowUp] Scheduled prospect/${platform} for ${psid}`);
 }
 
-async function schedulePostCourseFollowUp(psid, pageToken) {
+async function schedulePostCourseFollowUp(psid, pageToken, platform = 'messenger') {
   if (!SUPABASE_KEY) {
     console.log('[FollowUp] No Supabase key, cannot persist follow-up');
     return;
   }
 
-  // ยกเลิก prospect sequence เดิม (ถ้ามี)
   await supabaseRequest('PATCH',
     `chatbot_followups?psid=eq.${psid}&status=eq.active&sequence_type=eq.prospect`,
     { status: 'cancelled' }
   );
 
-  // ตรวจว่ามี post_course อยู่แล้วไหม (ไม่สร้างซ้ำ)
   const existing = await supabaseRequest('GET',
     `chatbot_followups?psid=eq.${psid}&status=eq.active&sequence_type=eq.post_course&select=id`
   );
   if (existing && existing.length > 0) {
-    console.log(`[FollowUp] Post-course sequence already active for ${psid}`);
+    console.log(`[FollowUp] Post-course already active for ${psid}`);
     return;
   }
 
@@ -174,10 +172,11 @@ async function schedulePostCourseFollowUp(psid, pageToken) {
     last_interaction: new Date().toISOString(),
     status: 'active',
     sequence_type: 'post_course',
+    platform,
   };
 
   await supabaseRequest('POST', 'chatbot_followups', row);
-  console.log(`[FollowUp] Scheduled post-course sequence for ${psid}`);
+  console.log(`[FollowUp] Scheduled post_course/${platform} for ${psid}`);
 }
 
 async function cancelFollowUp(psid) {

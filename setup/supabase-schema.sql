@@ -30,8 +30,9 @@ CREATE TABLE IF NOT EXISTS chatbot_followups (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Migration: เพิ่ม sequence_type ถ้ายังไม่มี (run ถ้า table มีอยู่แล้ว)
+-- Migration: เพิ่ม sequence_type และ platform ถ้ายังไม่มี
 ALTER TABLE chatbot_followups ADD COLUMN IF NOT EXISTS sequence_type TEXT DEFAULT 'prospect';
+ALTER TABLE chatbot_followups ADD COLUMN IF NOT EXISTS platform TEXT DEFAULT 'messenger'; -- 'messenger' | 'line'
 
 -- Index สำหรับ query follow-ups ที่ active
 CREATE INDEX IF NOT EXISTS idx_followups_active ON chatbot_followups (status) WHERE status = 'active';
