@@ -88,11 +88,81 @@ function supabaseRequest(method, path, body) {
   });
 }
 
+// --- Post-course follow-up sequence (สำหรับลูกค้าที่เรียนแล้ว) ---
+
+const POST_COURSE_SEQUENCE = [
+  {
+    delayMs: 3 * 24 * 60 * 60 * 1000, // +3 วันหลังเรียน
+    tag: 'CONFIRMED_EVENT_UPDATE',
+    label: 'post_day3',
+    message: `สวัสดีค่ะ! หลังเรียน CPR แล้วเป็นยังไงบ้างคะ? 😊\n\nถ้ายังไม่มี AED ที่บ้านหรือออฟฟิศ แนะนำเลยนะคะ\n🔹 เช่า AED เริ่มต้น ฿999/วัน หรือ ฿5,999/เดือน\n🔹 ผ่อนเป็นเจ้าของ มัดจำ ฿15,000 + ฿2,500/เดือน\n\nมี AED + รู้ CPR = ช่วยชีวิตได้จริงค่ะ 💛\n👉 ดูแพ็กเกจที่ LINE @jiacpr`,
+  },
+  {
+    delayMs: 14 * 24 * 60 * 60 * 1000, // +14 วัน
+    tag: 'CONFIRMED_EVENT_UPDATE',
+    label: 'post_day14',
+    message: `สวัสดีค่ะ! 🙏\n\nชวนเพื่อน ครอบครัว หรือเพื่อนร่วมงานมาเรียน CPR ด้วยได้นะคะ\n💡 ยิ่งคนรอบข้างรู้ CPR ด้วย โอกาสช่วยชีวิตกันได้สูงมากค่ะ\n\nคอร์ส Savelife แค่ ฿500/ท่าน เรียนจบในครึ่งวันค่ะ\n👉 จอง LINE @jiacpr หรือโทร 088-558-8078`,
+  },
+  {
+    delayMs: 60 * 24 * 60 * 60 * 1000, // +60 วัน
+    tag: 'CONFIRMED_EVENT_UPDATE',
+    label: 'post_day60',
+    message: `สวัสดีค่ะ! น้องเจียแวะมาทักนะคะ 😊\n\nถ้าอยากยกระดับทักษะ มีคอร์ส BLS & ACLS สำหรับบุคลากรทางการแพทย์ด้วยนะคะ\nดูรายละเอียดได้ที่ jiacpr.com/bls ค่ะ\n\nหรือถ้าองค์กรต้องการจัดอบรม In-house ทีมวิทยากรไปสอนถึงที่ได้เลยนะคะ 🏢\n👉 สอบถาม LINE @jiacpr`,
+  },
+  {
+    delayMs: 540 * 24 * 60 * 60 * 1000, // +18 เดือน (ใกล้หมดอายุ cert)
+    tag: 'CONFIRMED_EVENT_UPDATE',
+    label: 'post_day540',
+    message: `สวัสดีค่ะ! 🙏 ใบประกาศนียบัตร CPR ของคุณ\nใกล้หมดอายุ 2 ปีแล้วนะคะ\n\n💡 ต่ออายุใบ cert ได้ด้วยการเรียนซ้ำ Savelife ฿500 ค่ะ\nทักษะ CPR ยิ่งฝึกบ่อย ยิ่งช่วยชีวิตได้จริงค่ะ\n\n👉 จอง LINE @jiacpr หรือโทร 088-558-8078`,
+  },
+];
+
 // --- Public API ---
 
 async function scheduleFollowUp(psid, pageToken) {
   if (!SUPABASE_KEY) {
     console.log('[FollowUp] No Supabase key, cannot persist follow-up');
+    return;
+  }
+
+  // ยกเลิก sequence เดิมก่อน (ถ้ามี) แล้วสร้างใหม่
+  await supabaseRequest('PATCH',
+    `chatbot_followups?psid=eq.${psid}&status=eq.active`,
+    { status: 'cancelled' }
+  );
+
+  const row = {
+    psid,
+    page_token: pageToken,
+    started_at: new Date().toISOString(),
+    next_index: 0,
+    last_interaction: new Date().toISOString(),
+    status: 'active',
+    sequence_type: 'prospect',
+  };
+
+  await supabaseRequest('POST', 'chatbot_followups', row);
+  console.log(`[FollowUp] Scheduled prospect sequence for ${psid}`);
+}
+
+async function schedulePostCourseFollowUp(psid, pageToken) {
+  if (!SUPABASE_KEY) {
+    console.log('[FollowUp] No Supabase key, cannot persist follow-up');
+    return;
+  }
+
+  // ยกเลิก prospect sequence เดิม (ถ้ามี)
+  await supabaseRequest('PATCH',
+    `chatbot_followups?psid=eq.${psid}&status=eq.active&sequence_type=eq.prospect`,
+    { status: 'cancelled' }
+  );
+
+  // ตรวจว่ามี post_course อยู่แล้วไหม (ไม่สร้างซ้ำ)
+  const existing = await supabaseRequest('GET',
+    `chatbot_followups?psid=eq.${psid}&status=eq.active&sequence_type=eq.post_course&select=id`
+  );
+  if (existing && existing.length > 0) {
+    console.log(`[FollowUp] Post-course sequence already active for ${psid}`);
     return;
   }
 
@@ -103,10 +173,11 @@ async function scheduleFollowUp(psid, pageToken) {
     next_index: 0,
     last_interaction: new Date().toISOString(),
     status: 'active',
+    sequence_type: 'post_course',
   };
 
   await supabaseRequest('POST', 'chatbot_followups', row);
-  console.log(`[FollowUp] Scheduled for ${psid}`);
+  console.log(`[FollowUp] Scheduled post-course sequence for ${psid}`);
 }
 
 async function cancelFollowUp(psid) {
@@ -139,7 +210,11 @@ async function getReadyMessages() {
   const toSend = [];
 
   for (const entry of rows) {
-    if (entry.next_index >= FOLLOW_UP_SEQUENCE.length) {
+    const sequence = entry.sequence_type === 'post_course'
+      ? POST_COURSE_SEQUENCE
+      : FOLLOW_UP_SEQUENCE;
+
+    if (entry.next_index >= sequence.length) {
       // จบ sequence แล้ว
       await supabaseRequest('PATCH',
         `chatbot_followups?id=eq.${entry.id}`,
@@ -148,7 +223,7 @@ async function getReadyMessages() {
       continue;
     }
 
-    const step = FOLLOW_UP_SEQUENCE[entry.next_index];
+    const step = sequence[entry.next_index];
     const timeSinceStart = now - new Date(entry.started_at).getTime();
     const timeSinceLastReply = now - new Date(entry.last_interaction).getTime();
 
@@ -182,7 +257,9 @@ async function markSent(id, nextIndex) {
 
 module.exports = {
   FOLLOW_UP_SEQUENCE,
+  POST_COURSE_SEQUENCE,
   scheduleFollowUp,
+  schedulePostCourseFollowUp,
   cancelFollowUp,
   onUserReply,
   getReadyMessages,

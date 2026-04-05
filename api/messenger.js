@@ -4,7 +4,7 @@ const { getAIResponse, checkHandoff } = require('./lib/ai');
 const { triggerHandoff } = require('./lib/handoff');
 const { leadStore } = require('./lib/lead-store');
 const { logLeadToSheet } = require('./lib/sheets');
-const { scheduleFollowUp, cancelFollowUp, onUserReply } = require('./lib/follow-up');
+const { scheduleFollowUp, schedulePostCourseFollowUp, cancelFollowUp, onUserReply } = require('./lib/follow-up');
 
 const FB_VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN || 'jia_chatbot_verify_2026';
 const FB_APP_SECRET = process.env.FB_APP_SECRET;
@@ -307,7 +307,17 @@ module.exports = async (req, res) => {
           const aiResponse = await getAIResponse(psid, text, lead?.level || null);
           const { hasHandoff, type, cleanText } = checkHandoff(aiResponse);
 
-          await sendText(psid, cleanText, pageToken);
+          // ตรวจ INTENT:POST_COURSE (ลูกค้าบอกว่าเรียนแล้ว)
+          const postCourseMatch = aiResponse.match(/\[INTENT:POST_COURSE\]/);
+          const finalText = cleanText.replace(/\[INTENT:POST_COURSE\]/g, '').trim();
+
+          await sendText(psid, finalText, pageToken);
+
+          if (postCourseMatch) {
+            leadStore.update(psid, { level: 'post_course' });
+            schedulePostCourseFollowUp(psid, pageToken).catch(console.error);
+            console.log(`[Messenger] Post-course sequence scheduled for ${psid}`);
+          }
 
           if (hasHandoff) {
             triggerHandoff({
