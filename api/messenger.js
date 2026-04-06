@@ -86,9 +86,10 @@ function getUserName(psid, pageToken) {
 
 // --- Quick Reply Flow (structured buttons) ---
 
-const WELCOME_BUTTONS = ['อบรม CPR บุคคลทั่วไป', 'จัดอบรมในองค์กร', 'ซื้อ/เช่า AED', 'อื่นๆ'];
+const WELCOME_BUTTONS = ['อบรม CPR บุคคลทั่วไป', 'จัดอบรมในองค์กร', 'นักศึกษาแพทย์/เภสัช', 'ซื้อ/เช่า AED'];
 const TIMING_BUTTONS = ['สัปดาห์นี้', 'สัปดาห์หน้า', 'เดือนหน้า', 'ยังไม่แน่ใจ'];
 const CORPORATE_SIZE_BUTTONS = ['ไม่เกิน 7 คน', '10-15 คน', '15 คนขึ้นไป'];
+const STUDENT_TYPE_BUTTONS = ['นักเรียน/นักศึกษา', 'นักศึกษาแพทย์', 'นักศึกษาเภสัช'];
 const AED_BUTTONS = ['ให้โทรกลับ', 'ดูเว็บก่อน'];
 const YES_NO_BUTTONS = ['สนใจจอง', 'ขอข้อมูลเพิ่ม', 'ไว้ก่อน'];
 
@@ -99,7 +100,13 @@ function matchButton(text) {
   // Welcome buttons
   if (t === 'อบรม CPR บุคคลทั่วไป') return 'CPR_INDIVIDUAL';
   if (t === 'จัดอบรมในองค์กร') return 'CORPORATE';
+  if (t === 'นักศึกษาแพทย์/เภสัช') return 'STUDENT';
   if (t === 'ซื้อ/เช่า AED') return 'AED';
+
+  // Student type buttons
+  if (t === 'นักเรียน/นักศึกษา') return 'STUDENT_GENERAL';
+  if (t === 'นักศึกษาแพทย์') return 'STUDENT_MED';
+  if (t === 'นักศึกษาเภสัช') return 'STUDENT_PHARM';
 
   // Timing buttons
   if (t === 'สัปดาห์นี้' || t === 'สัปดาห์หน้า') return 'HOT_LEAD';
@@ -209,6 +216,34 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
         `รับทราบค่ะ! ทีมงานจะโทรกลับภายใน 1 ชม. นะคะ 📞\nขอบคุณที่สนใจค่ะ 🙏`,
         pageToken);
       triggerHandoff({ customerName, platform: 'Facebook Messenger', question: '📞 ขอให้โทรกลับเรื่อง AED', handoffType: 'AED_CALLBACK' }).catch(console.error);
+      return true;
+
+    case 'STUDENT':
+      leadStore.update(psid, { name: customerName });
+      await sendQuickReply(psid,
+        `ยินดีต้อนรับน้องๆ ค่ะ! 📚\nน้องเจียมีคอร์สและข้อสอบเหมาะสำหรับทุกสาขาเลยค่ะ\n\nน้องเรียนสายไหนคะ?`,
+        STUDENT_TYPE_BUTTONS, pageToken);
+      return true;
+
+    case 'STUDENT_GENERAL':
+      leadStore.update(psid, { type: 'student', studentType: 'general', name: customerName });
+      await sendQuickReply(psid,
+        `คอร์ส Savelife เหมาะมากเลยค่ะ! ฿500 เรียน 3-4 ชม. จบในวันเดียว 🎓\nได้ใบ cert ใส่ portfolio สมัครงานได้ด้วย\n\n📚 ฝึกทำข้อสอบออนไลน์ได้ที่ roodee.me ค่ะ\n💡 หรือเรียนออนไลน์ฟรีก่อนที่ jiacpr.com/online\n\nสนใจจองเรียนช่วงไหนคะ?`,
+        TIMING_BUTTONS, pageToken);
+      return true;
+
+    case 'STUDENT_MED':
+      leadStore.update(psid, { type: 'student', studentType: 'med', name: customerName });
+      await sendQuickReply(psid,
+        `สำหรับน้องแพทย์มีหลายคอร์สเลยค่ะ 🩺\n\n✅ BLS / ACLS — ใบ cert ใช้ขึ้นทะเบียนวิชาชีพได้\n✅ เตรียมสอบ NL / OSCE — ดูที่ jiacpr.com/nl\n📚 ฝึกทำข้อสอบได้ที่ morroo.com ค่ะ\n\nสนใจคอร์สไหนคะ? หรือจะจองเลยก็ได้ค่ะ`,
+        YES_NO_BUTTONS, pageToken);
+      return true;
+
+    case 'STUDENT_PHARM':
+      leadStore.update(psid, { type: 'student', studentType: 'pharm', name: customerName });
+      await sendQuickReply(psid,
+        `เภสัชกรอยู่หน้าด่านแรกที่พบผู้ป่วยเลยค่ะ มี CPR ช่วยชีวิตได้จริง 💛\n\n✅ Savelife ฿500 — เริ่มต้นสำหรับทุกคน\n✅ BLS — cert ระดับบุคลากรการแพทย์\n📚 ฝึกทำข้อสอบได้ที่ pharmru.com ค่ะ\n\nสนใจจองช่วงไหนคะ?`,
+        TIMING_BUTTONS, pageToken);
       return true;
 
     case 'AED_WEB':
