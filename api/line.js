@@ -10,6 +10,7 @@ const { getWelcomeMessage, recordConversion, recordImpression } = require('./lib
 
 const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
 const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+const ADMIN_SECRET = process.env.ADMIN_SECRET || '';
 
 // ตรวจ signature จาก LINE
 function verifySignature(rawBody, signature) {
@@ -348,6 +349,24 @@ module.exports = async (req, res) => {
 
       const customerName = await getUserProfile(userId);
       const lead = leadStore.get(userId);
+
+      // Admin commands
+      if (ADMIN_SECRET && text.startsWith(`/admin:${ADMIN_SECRET}`)) {
+        const cmd = text.slice(`/admin:${ADMIN_SECRET}`.length).trim().toLowerCase();
+        const { getABStats } = require('./lib/ab-test');
+        let hot = 0, warm = 0, cold = 0, total = 0;
+        leadStore.forEach && leadStore.forEach((v) => {
+          total++;
+          if (v.level === 'hot') hot++;
+          else if (v.level === 'warm') warm++;
+          else cold++;
+        });
+        const abStats = await getABStats().catch(() => null);
+        await replyText(replyToken,
+          `📊 Admin Stats\n\nLeads: ${total} total\n🔥 Hot: ${hot} | 🟡 Warm: ${warm} | 🔵 Cold: ${cold}\n\nA/B Test:\nA: ${abStats?.A?.assigned||0} → ${abStats?.A?.rate||'?'}\nB: ${abStats?.B?.assigned||0} → ${abStats?.B?.rate||'?'}`
+        );
+        continue;
+      }
 
       // First-time user ที่ไม่ได้กดปุ่ม → A/B welcome
       if (!lead && !matchButton(text)) {

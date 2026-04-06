@@ -11,12 +11,24 @@ const { getWelcomeMessage, recordConversion, recordImpression } = require('./lib
 
 const FB_VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN || 'jia_chatbot_verify_2026';
 const FB_APP_SECRET = process.env.FB_APP_SECRET;
+const ADMIN_SECRET = process.env.ADMIN_SECRET || '';
 
-// Map page ID → access token
+// Map page/IG account ID → access token
+// Instagram Business Account IDs share the same token as the connected FB Page
 const PAGE_TOKENS = {
+  // Facebook Page IDs
   '115768024942069': process.env.FB_PAGE_ACCESS_TOKEN_JIA_CPR,
   '1032110679988495': process.env.FB_PAGE_ACCESS_TOKEN_JIA_TRAINING,
+  // Instagram Business Account IDs (connected to above FB Pages)
+  [process.env.IG_BUSINESS_ID_JIA_CPR]: process.env.FB_PAGE_ACCESS_TOKEN_JIA_CPR,
+  [process.env.IG_BUSINESS_ID_JIA_TRAINING]: process.env.FB_PAGE_ACCESS_TOKEN_JIA_TRAINING,
 };
+
+// Set of known Instagram Business Account IDs for platform detection
+const IG_ACCOUNT_IDS = new Set([
+  process.env.IG_BUSINESS_ID_JIA_CPR,
+  process.env.IG_BUSINESS_ID_JIA_TRAINING,
+].filter(Boolean));
 
 // --- Facebook Send API helpers ---
 
@@ -197,7 +209,7 @@ function matchButton(text) {
 }
 
 // Handle structured button flows — returns true if handled
-async function handleButtonFlow(psid, text, pageToken, customerName) {
+async function handleButtonFlow(psid, text, pageToken, customerName, platform = 'Facebook Messenger') {
   const action = matchButton(text);
   if (!action) return false;
 
@@ -254,7 +266,7 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
         `เยี่ยมเลยค่ะ! 🎉\n\nจองคอร์สได้เลย:\n👉 แอดไลน์ @jiacpr (ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n\n💳 ชำระผ่าน PromptPay: 088-558-8078 (฿500)\n💡 เรียนออนไลน์ฟรีก่อนที่ jiacpr.com/online แล้วมาเรียน hands-on ลดเหลือ ฿400 ค่ะ!`,
         AFTER_BOOKING_BUTTONS, pageToken);
       // Alert team for hot lead
-      triggerHandoff({ customerName, platform: 'Facebook Messenger', question: `🔥 HOT LEAD — สนใจ${text} (CPR บุคคลทั่วไป)`, handoffType: 'HOT_LEAD' }).catch(console.error);
+      triggerHandoff({ customerName, platform: platform, question: `🔥 HOT LEAD — สนใจ${text} (CPR บุคคลทั่วไป)`, handoffType: 'HOT_LEAD' }).catch(console.error);
       return true;
 
     case 'WARM_LEAD':
@@ -293,7 +305,7 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
       await sendText(psid,
         `รับทราบค่ะ! สำหรับ 15 คนขึ้นไปทีมงานจะจัดแพ็กเกจพิเศษให้ค่ะ\nขอส่งต่อให้ทีมติดต่อกลับเพื่อเสนอราคาที่เหมาะสมนะคะ 🙏`,
         pageToken);
-      triggerHandoff({ customerName, platform: 'Facebook Messenger', question: `🏢 อบรมองค์กร 15+ คน`, handoffType: 'CORPORATE_QUOTE' }).catch(console.error);
+      triggerHandoff({ customerName, platform: platform, question: `🏢 อบรมองค์กร 15+ คน`, handoffType: 'CORPORATE_QUOTE' }).catch(console.error);
       return true;
 
     case 'AED_CALLBACK':
@@ -302,7 +314,7 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
       await sendText(psid,
         `รับทราบค่ะ! ทีมงานจะโทรกลับภายใน 1 ชม. นะคะ 📞\nขอบคุณที่สนใจค่ะ 🙏`,
         pageToken);
-      triggerHandoff({ customerName, platform: 'Facebook Messenger', question: '📞 ขอให้โทรกลับเรื่อง AED', handoffType: 'AED_CALLBACK' }).catch(console.error);
+      triggerHandoff({ customerName, platform: platform, question: '📞 ขอให้โทรกลับเรื่อง AED', handoffType: 'AED_CALLBACK' }).catch(console.error);
       return true;
 
     case 'STUDENT':
@@ -348,7 +360,7 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
       await sendQuickReply(psid,
         `เยี่ยมเลยค่ะ! 🎉 จองได้เลย:\n\n👉 แอดไลน์ @jiacpr (แนะนำ — ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n\n💳 ชำระผ่าน PromptPay: 088-558-8078\nหรือโอนธนาคารแล้วส่งสลิปทาง LINE ได้เลยค่ะ`,
         AFTER_BOOKING_BUTTONS, pageToken);
-      triggerHandoff({ customerName, platform: 'Facebook Messenger', question: `✅ สนใจจอง (${lead?.type || 'ทั่วไป'})`, handoffType: 'HOT_LEAD' }).catch(console.error);
+      triggerHandoff({ customerName, platform: platform, question: `✅ สนใจจอง (${lead?.type || 'ทั่วไป'})`, handoffType: 'HOT_LEAD' }).catch(console.error);
       return true;
 
     case 'WANT_INFO':
@@ -374,12 +386,57 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
       await sendText(psid,
         `ดูตารางเรียนทุกรอบได้ที่ 👉 www.jiacpr.com/schedule\nหรือทักทีมผ่าน LINE @jiacpr เพื่อดูรอบที่ว่างค่ะ 📅`,
         pageToken);
-      triggerHandoff({ customerName, platform: 'Facebook Messenger', question: '📅 ขอดูตารางเรียน', handoffType: 'SCHEDULE' }).catch(console.error);
+      triggerHandoff({ customerName, platform: platform, question: '📅 ขอดูตารางเรียน', handoffType: 'SCHEDULE' }).catch(console.error);
       return true;
 
     default:
       return false;
   }
+}
+
+// --- Admin command handler ---
+
+const { getABStats } = require('./lib/ab-test');
+
+async function handleAdminCommand(psid, cmd, pageToken) {
+  cmd = (cmd || '').toLowerCase().trim();
+
+  if (cmd === 'stats' || cmd === '') {
+    const { leadStore: ls } = require('./lib/lead-store');
+    let hot = 0, warm = 0, cold = 0, total = 0;
+    ls.forEach && ls.forEach((v) => {
+      total++;
+      if (v.level === 'hot') hot++;
+      else if (v.level === 'warm') warm++;
+      else cold++;
+    });
+    const abStats = await getABStats().catch(() => null);
+    const aRate = abStats?.A?.rate || '?';
+    const bRate = abStats?.B?.rate || '?';
+    await sendText(psid,
+      `📊 Admin Stats (in-memory)\n\n` +
+      `Leads: ${total} total\n` +
+      `🔥 Hot: ${hot} | 🟡 Warm: ${warm} | 🔵 Cold: ${cold}\n\n` +
+      `A/B Test:\n` +
+      `Variant A: ${abStats?.A?.assigned || 0} users → ${aRate}\n` +
+      `Variant B: ${abStats?.B?.assigned || 0} users → ${bRate}`,
+      pageToken
+    );
+    return;
+  }
+
+  if (cmd.startsWith('broadcast ')) {
+    const msg = cmd.slice('broadcast '.length).trim();
+    await sendText(psid, `🔄 Broadcast ไม่รองรับผ่านคำสั่งนี้\nใช้ POST /api/broadcast แทนค่ะ`, pageToken);
+    return;
+  }
+
+  await sendText(psid,
+    `คำสั่ง Admin:\n` +
+    `/admin:<secret> stats — ดูสถิติ\n` +
+    `/admin:<secret> broadcast <msg> — (ใช้ /api/broadcast แทน)`,
+    pageToken
+  );
 }
 
 // --- Main webhook handler ---
@@ -412,6 +469,8 @@ module.exports = async (req, res) => {
           console.warn('[Messenger] ไม่มี token สำหรับ page:', pageId);
           continue;
         }
+        const isIG = IG_ACCOUNT_IDS.has(pageId);
+        const platformLabel = isIG ? 'Instagram DM' : 'Facebook Messenger';
 
         // ---- Handle FB Post comments (feed events) ----
         for (const change of entry.changes || []) {
@@ -453,23 +512,30 @@ module.exports = async (req, res) => {
           if (!text) continue;
 
           const psid = event.sender.id;
-          console.log(`[Messenger] ${psid}: ${text}`);
+          console.log(`[${isIG ? 'Instagram' : 'Messenger'}] ${psid}: ${text}`);
 
           sendTypingOn(psid, pageToken);
           const customerName = await getUserName(psid, pageToken);
+
+          // Admin commands — prefixed with /admin:<secret>
+          if (ADMIN_SECRET && text.startsWith(`/admin:${ADMIN_SECRET}`)) {
+            const cmd = text.slice(`/admin:${ADMIN_SECRET}`.length).trim();
+            await handleAdminCommand(psid, cmd, pageToken);
+            continue;
+          }
 
           // First-time user → send A/B tested welcome with quick replies
           const lead = leadStore.get(psid);
           if (!lead && !matchButton(text)) {
             leadStore.update(psid, { name: customerName, firstMessage: text });
             const { message: welcomeMsg } = getWelcomeMessage(psid);
-            recordImpression(psid, 'messenger').catch(console.error);
+            recordImpression(psid, isIG ? 'instagram' : 'messenger').catch(console.error);
             await sendQuickReply(psid, welcomeMsg, WELCOME_BUTTONS, pageToken);
             continue;
           }
 
           // Try structured button flow first
-          const handled = await handleButtonFlow(psid, text, pageToken, customerName);
+          const handled = await handleButtonFlow(psid, text, pageToken, customerName, platformLabel);
           if (handled) continue;
 
           // Check for referral code in free text (e.g. "มีโค้ด JIA12345")
@@ -509,7 +575,7 @@ module.exports = async (req, res) => {
           if (hasHandoff) {
             triggerHandoff({
               customerName,
-              platform: 'Facebook Messenger',
+              platform: platform,
               question: text,
               handoffType: type,
             }).catch(console.error);
