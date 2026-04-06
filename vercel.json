@@ -9,6 +9,7 @@
     { "src": "/api/broadcast", "dest": "/api/broadcast.js" },
     { "src": "/api/webchat", "dest": "/api/webchat.js" },
     { "src": "/chat-widget.js", "dest": "/public/chat-widget.js" },
+    { "src": "/api/dashboard", "dest": "/api/dashboard.js" },
     { "src": "/(.*)", "dest": "/api/index.js" }
   ],
   "crons": [
