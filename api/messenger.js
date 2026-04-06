@@ -7,6 +7,7 @@ const { logLeadToSheet } = require('./lib/sheets');
 const { scheduleFollowUp, schedulePostCourseFollowUp, cancelFollowUp, onUserReply } = require('./lib/follow-up');
 const { getOrCreateCode, useReferralCode, extractCode } = require('./lib/referral');
 const { createBooking, parseDateTimeFromText } = require('./lib/calendar');
+const { getWelcomeMessage, recordConversion, recordImpression } = require('./lib/ab-test');
 
 const FB_VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN || 'jia_chatbot_verify_2026';
 const FB_APP_SECRET = process.env.FB_APP_SECRET;
@@ -247,6 +248,7 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
     case 'HOT_LEAD':
       leadStore.update(psid, { level: 'hot', timing: text });
       cancelFollowUp(psid);
+      recordConversion(psid, 'messenger').catch(console.error);
       logLeadToSheet({ name: customerName, psid, type: lead?.type || 'individual', level: 'hot', timing: text, source: 'messenger_bot' }).catch(console.error);
       await sendQuickReply(psid,
         `เยี่ยมเลยค่ะ! 🎉\n\nจองคอร์สได้เลย:\n👉 แอดไลน์ @jiacpr (ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n\n💳 ชำระผ่าน PromptPay: 088-558-8078 (฿500)\n💡 เรียนออนไลน์ฟรีก่อนที่ jiacpr.com/online แล้วมาเรียน hands-on ลดเหลือ ฿400 ค่ะ!`,
@@ -341,6 +343,7 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
     case 'WANT_BOOKING':
       leadStore.update(psid, { level: 'hot' });
       cancelFollowUp(psid);
+      recordConversion(psid, 'messenger').catch(console.error);
       logLeadToSheet({ name: customerName, psid, type: lead?.type || 'individual', level: 'hot', message: 'สนใจจอง', source: 'messenger_bot' }).catch(console.error);
       await sendQuickReply(psid,
         `เยี่ยมเลยค่ะ! 🎉 จองได้เลย:\n\n👉 แอดไลน์ @jiacpr (แนะนำ — ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n\n💳 ชำระผ่าน PromptPay: 088-558-8078\nหรือโอนธนาคารแล้วส่งสลิปทาง LINE ได้เลยค่ะ`,
@@ -455,13 +458,13 @@ module.exports = async (req, res) => {
           sendTypingOn(psid, pageToken);
           const customerName = await getUserName(psid, pageToken);
 
-          // First-time user → send welcome with quick replies
+          // First-time user → send A/B tested welcome with quick replies
           const lead = leadStore.get(psid);
           if (!lead && !matchButton(text)) {
             leadStore.update(psid, { name: customerName, firstMessage: text });
-            await sendQuickReply(psid,
-              `สวัสดีค่ะ! ยินดีต้อนรับสู่ JIA TRAINER CENTER 🙏\nน้องเจียพร้อมช่วยดูแลค่ะ\n\nคุณสนใจเรื่องไหนคะ?`,
-              WELCOME_BUTTONS, pageToken);
+            const { message: welcomeMsg } = getWelcomeMessage(psid);
+            recordImpression(psid, 'messenger').catch(console.error);
+            await sendQuickReply(psid, welcomeMsg, WELCOME_BUTTONS, pageToken);
             continue;
           }
 

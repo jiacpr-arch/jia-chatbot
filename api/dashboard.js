@@ -1,4 +1,5 @@
 const https = require('https');
+const { getABStats } = require('./lib/ab-test');
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://tpoiyykbgsgnrdwzgzvn.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
@@ -105,6 +106,13 @@ async function getLeads() {
   );
   if (!result || !Array.isArray(result.data)) return [];
   return result.data;
+}
+
+async function getReferralStats() {
+  const result = await supabaseGet(
+    'chatbot_referrals?select=user_name,platform,code,referral_count,discount_baht&order=referral_count.desc&limit=20'
+  );
+  return Array.isArray(result?.data) ? result.data : [];
 }
 
 // --- HTML ---
@@ -225,6 +233,34 @@ function renderHTML(token) {
   .badge-warm { background: #fffaf0; color: #dd6b20; }
   .badge-cold { background: #ebf8ff; color: #3182ce; }
 
+  .section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1a365d;
+    margin: 1.5rem 0 0.75rem;
+  }
+
+  .ab-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .ab-card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 1.25rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+
+  .ab-card h3 { font-size: 0.9rem; font-weight: 700; margin-bottom: 0.75rem; color: #4a5568; }
+  .ab-card .ab-stat { display: flex; justify-content: space-between; margin-bottom: 0.35rem; font-size: 0.85rem; }
+  .ab-card .ab-stat .lbl { color: #718096; }
+  .ab-card .ab-rate { font-size: 1.5rem; font-weight: 700; color: #1a365d; margin-top: 0.5rem; }
+  .ab-card.winner { border: 2px solid #38a169; }
+  .ab-card.winner h3::after { content: ' 🏆'; }
+
   .loading {
     text-align: center;
     padding: 3rem;
@@ -256,6 +292,35 @@ function renderHTML(token) {
     <div class="stat-card"><div class="label">Total All Time</div><div class="value" id="statAll">-</div></div>
     <div class="stat-card"><div class="label">Pending Follow-ups</div><div class="value" id="statFollowups">-</div></div>
   </div>
+  <p class="section-title">A/B Test — Welcome Message</p>
+  <div class="ab-grid" id="abGrid">
+    <div class="ab-card" id="abCardA">
+      <h3>Variant A — สุภาพ บอกตรงๆ</h3>
+      <div class="ab-stat"><span class="lbl">Impressions</span><span id="abAImpr">-</span></div>
+      <div class="ab-stat"><span class="lbl">Conversions</span><span id="abAConv">-</span></div>
+      <div class="ab-rate" id="abARate">-%</div>
+    </div>
+    <div class="ab-card" id="abCardB">
+      <h3>Variant B — Social Proof + Urgency</h3>
+      <div class="ab-stat"><span class="lbl">Impressions</span><span id="abBImpr">-</span></div>
+      <div class="ab-stat"><span class="lbl">Conversions</span><span id="abBConv">-</span></div>
+      <div class="ab-rate" id="abBRate">-%</div>
+    </div>
+  </div>
+
+  <p class="section-title">Referral Program — Top Referrers</p>
+  <div class="table-wrap" style="margin-bottom:1.5rem">
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Platform</th><th>Code</th><th>Referrals</th><th>Credits (฿)</th></tr>
+      </thead>
+      <tbody id="referralBody">
+        <tr><td colspan="5" class="loading">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="section-title">Recent Leads</p>
   <div class="table-wrap">
     <table>
       <thead>
@@ -346,9 +411,56 @@ function renderHTML(token) {
       });
   }
 
+  function loadABStats() {
+    fetchJSON('/api/dashboard?data=ab${tokenParam}')
+      .then(function(ab) {
+        function fill(variant, imprId, convId, rateId, cardId) {
+          var d = ab[variant] || {};
+          document.getElementById(imprId).textContent = d.assigned || 0;
+          document.getElementById(convId).textContent = d.converted || 0;
+          document.getElementById(rateId).textContent = d.rate || '0%';
+        }
+        fill('A', 'abAImpr', 'abAConv', 'abARate', 'abCardA');
+        fill('B', 'abBImpr', 'abBConv', 'abBRate', 'abCardB');
+        // Highlight winner
+        var rateA = parseFloat((ab.A && ab.A.rate) || 0);
+        var rateB = parseFloat((ab.B && ab.B.rate) || 0);
+        if (rateA > rateB) { document.getElementById('abCardA').classList.add('winner'); document.getElementById('abCardB').classList.remove('winner'); }
+        else if (rateB > rateA) { document.getElementById('abCardB').classList.add('winner'); document.getElementById('abCardA').classList.remove('winner'); }
+      })
+      .catch(function(e) { console.error('A/B stats error', e); });
+  }
+
+  function loadReferrals() {
+    fetchJSON('/api/dashboard?data=referrals${tokenParam}')
+      .then(function(rows) {
+        var tbody = document.getElementById('referralBody');
+        if (!rows.length) {
+          tbody.innerHTML = '<tr><td colspan="5" class="loading">No referrals yet</td></tr>';
+          return;
+        }
+        tbody.innerHTML = rows.map(function(r) {
+          return '<tr>'
+            + '<td>' + esc(r.user_name) + '</td>'
+            + '<td>' + esc(r.platform) + '</td>'
+            + '<td><code>' + esc(r.code) + '</code></td>'
+            + '<td>' + (r.referral_count || 0) + '</td>'
+            + '<td>฿' + (r.discount_baht || 0) + '</td>'
+            + '</tr>';
+        }).join('');
+      })
+      .catch(function(e) {
+        document.getElementById('referralBody').innerHTML =
+          '<tr><td colspan="5" class="error-msg">Failed to load</td></tr>';
+        console.error('Referral error', e);
+      });
+  }
+
   function refresh() {
     loadStats();
     loadLeads();
+    loadABStats();
+    loadReferrals();
   }
 
   refresh();
@@ -387,6 +499,18 @@ module.exports = async function handler(req, res) {
       const leads = await getLeads();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify(leads));
+    }
+
+    if (dataParam === 'ab') {
+      const abStats = await getABStats();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify(abStats));
+    }
+
+    if (dataParam === 'referrals') {
+      const referrals = await getReferralStats();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify(referrals));
     }
 
     // Default: serve HTML dashboard

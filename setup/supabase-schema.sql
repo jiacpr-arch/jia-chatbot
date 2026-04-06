@@ -65,3 +65,18 @@ CREATE TABLE IF NOT EXISTS chatbot_referral_uses (
 CREATE INDEX IF NOT EXISTS idx_referrals_user ON chatbot_referrals (user_id);
 CREATE INDEX IF NOT EXISTS idx_referrals_code ON chatbot_referrals (code);
 CREATE INDEX IF NOT EXISTS idx_referral_uses_code ON chatbot_referral_uses (code);
+
+-- ตาราง A/B Tests
+CREATE TABLE IF NOT EXISTS chatbot_ab_tests (
+  id BIGSERIAL PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  platform TEXT DEFAULT 'messenger',
+  variant TEXT NOT NULL,            -- 'A' หรือ 'B'
+  converted BOOLEAN DEFAULT FALSE,
+  converted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, platform)         -- 1 record per user/platform
+);
+
+CREATE INDEX IF NOT EXISTS idx_ab_variant ON chatbot_ab_tests (variant);
+CREATE INDEX IF NOT EXISTS idx_ab_converted ON chatbot_ab_tests (converted);

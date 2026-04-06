@@ -20,8 +20,7 @@ const FOLLOW_UP_SEQUENCE = [
     tag: null,
     label: 'hour1',
     message: `รู้ไหมคะ? 💔 70% ของผู้ป่วยหัวใจหยุดเต้น เสียชีวิตเพราะไม่มีคนทำ CPR ได้ทัน\n\nเรียนแค่ครึ่งวันก็ช่วยชีวิตคนได้แล้วค่ะ\n\n👉 จองคอร์สได้ที่ LINE @jiacpr หรือโทร 088-558-8078`,
-  },
-  {
+  },  {
     delayMs: 24 * 60 * 60 * 1000, // +1 วัน
     tag: null,
     label: 'day1',
@@ -91,6 +90,12 @@ function supabaseRequest(method, path, body) {
 // --- Post-course follow-up sequence (สำหรับลูกค้าที่เรียนแล้ว) ---
 
 const POST_COURSE_SEQUENCE = [
+  {
+    delayMs: 1 * 24 * 60 * 60 * 1000, // +1 วันหลังเรียน → ขอรีวิว Google
+    tag: 'CONFIRMED_EVENT_UPDATE',
+    label: 'post_day1_review',
+    message: `สวัสดีค่ะ! หวังว่าจะได้ประโยชน์จากคอร์ส CPR นะคะ 😊\n\n🙏 ช่วยรีวิวให้น้องเจียด้วยได้ไหมคะ? รีวิวของคุณช่วยให้คนอื่นตัดสินใจเรียนและช่วยชีวิตคนได้มากขึ้นเลยค่ะ\n\n⭐ รีวิว Google ได้ที่:\n${process.env.GOOGLE_REVIEW_URL || 'https://g.page/r/jia-trainer-center/review'}\n\nขอบคุณมากนะคะ 💛`,
+  },
   {
     delayMs: 3 * 24 * 60 * 60 * 1000, // +3 วันหลังเรียน
     tag: 'CONFIRMED_EVENT_UPDATE',

@@ -6,6 +6,7 @@ const { leadStore } = require('./lib/lead-store');
 const { logLeadToSheet } = require('./lib/sheets');
 const { scheduleFollowUp, schedulePostCourseFollowUp, cancelFollowUp, onUserReply } = require('./lib/follow-up');
 const { getOrCreateCode, useReferralCode, extractCode } = require('./lib/referral');
+const { getWelcomeMessage, recordConversion, recordImpression } = require('./lib/ab-test');
 
 const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
 const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
@@ -183,6 +184,7 @@ async function handleButtonFlow(userId, text, replyToken, customerName) {
     case 'HOT_LEAD':
       leadStore.update(userId, { level: 'hot', timing: text });
       cancelFollowUp(userId);
+      recordConversion(userId, 'line').catch(console.error);
       logLeadToSheet({ name: customerName, psid: userId, type: lead?.type || 'individual', level: 'hot', timing: text, source: 'line_bot' }).catch(console.error);
       await replyQuickReply(replyToken,
         `เยี่ยมเลยค่ะ! 🎉\n\nจองคอร์สได้เลย:\n👉 แอดไลน์ @jiacpr (ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n\n💳 ชำระผ่าน PromptPay: 088-558-8078 (฿500)\n💡 เรียนออนไลน์ฟรีก่อนที่ jiacpr.com/online แล้วมาเรียน hands-on ลดเหลือ ฿400 ค่ะ!`,
@@ -272,6 +274,7 @@ async function handleButtonFlow(userId, text, replyToken, customerName) {
     case 'WANT_BOOKING':
       leadStore.update(userId, { level: 'hot' });
       cancelFollowUp(userId);
+      recordConversion(userId, 'line').catch(console.error);
       logLeadToSheet({ name: customerName, psid: userId, type: lead?.type || 'individual', level: 'hot', message: 'สนใจจอง', source: 'line_bot' }).catch(console.error);
       await replyQuickReply(replyToken,
         `เยี่ยมเลยค่ะ! 🎉 จองได้เลย:\n\n👉 แอดไลน์ @jiacpr (แนะนำ — ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n\n💳 ชำระผ่าน PromptPay: 088-558-8078\nหรือโอนธนาคารแล้วส่งสลิปทาง LINE ได้เลยค่ะ`,
@@ -325,9 +328,11 @@ module.exports = async (req, res) => {
         const userId = event.source.userId;
         const customerName = await getUserProfile(userId);
         leadStore.update(userId, { name: customerName });
+        const { message: welcomeMsg } = getWelcomeMessage(userId);
+        recordImpression(userId, 'line').catch(console.error);
         await replyQuickReply(
           event.replyToken,
-          `สวัสดีค่ะ ${customerName}! ยินดีต้อนรับสู่ JIA TRAINER CENTER 🙏\nน้องเจียพร้อมดูแลค่ะ\n\nสนใจเรื่องไหนคะ?`,
+          `สวัสดีค่ะ ${customerName}!\n${welcomeMsg}`,
           WELCOME_BUTTONS
         );
         continue;
@@ -344,12 +349,12 @@ module.exports = async (req, res) => {
       const customerName = await getUserProfile(userId);
       const lead = leadStore.get(userId);
 
-      // First-time user ที่ไม่ได้กดปุ่ม
+      // First-time user ที่ไม่ได้กดปุ่ม → A/B welcome
       if (!lead && !matchButton(text)) {
         leadStore.update(userId, { name: customerName, firstMessage: text });
-        await replyQuickReply(replyToken,
-          `สวัสดีค่ะ! ยินดีต้อนรับสู่ JIA TRAINER CENTER 🙏\nน้องเจียพร้อมช่วยดูแลค่ะ\n\nคุณสนใจเรื่องไหนคะ?`,
-          WELCOME_BUTTONS);
+        const { message: welcomeMsg } = getWelcomeMessage(userId);
+        recordImpression(userId, 'line').catch(console.error);
+        await replyQuickReply(replyToken, welcomeMsg, WELCOME_BUTTONS);
         continue;
       }
 
