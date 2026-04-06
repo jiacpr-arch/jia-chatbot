@@ -1,5 +1,6 @@
 const https = require('https');
 const { getReadyMessages, markSent } = require('../lib/follow-up');
+const { assignVariant, getFollowUpVariant } = require('../lib/ab-test');
 
 const CRON_SECRET = process.env.CRON_SECRET || '';
 
@@ -78,7 +79,11 @@ module.exports = async (req, res) => {
 
   let sent = 0;
   for (const msg of messages) {
-    const ok = await sendFollowUp(msg);
+    // A/B: override hour-1 message with user's assigned variant
+    const abOverride = getFollowUpVariant(msg.psid, msg.label);
+    const msgToSend = abOverride ? { ...msg, message: abOverride } : msg;
+
+    const ok = await sendFollowUp(msgToSend);
     if (ok) {
       await markSent(msg.id, msg.index);
       sent++;

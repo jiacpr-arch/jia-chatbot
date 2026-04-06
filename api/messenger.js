@@ -165,7 +165,8 @@ const CORPORATE_SIZE_BUTTONS = ['ไม่เกิน 7 คน', '10-15 คน'
 const STUDENT_TYPE_BUTTONS = ['นักเรียน/นักศึกษา', 'นักศึกษาแพทย์', 'นักศึกษาเภสัช'];
 const AED_BUTTONS = ['ให้โทรกลับ', 'ดูเว็บก่อน'];
 const YES_NO_BUTTONS = ['สนใจจอง', 'ขอข้อมูลเพิ่ม', 'ไว้ก่อน'];
-const AFTER_BOOKING_BUTTONS = ['รับโค้ดชวนเพื่อน', 'ดูรอบเรียน'];
+const AFTER_BOOKING_BUTTONS = ['จองผ่านบอท', 'รับโค้ดชวนเพื่อน', 'ดูรอบเรียน'];
+const BOOK_DATE_BUTTONS = ['เสาร์นี้', 'อาทิตย์นี้', 'สัปดาห์หน้า', 'เลือกวันอื่น'];
 
 // Check if message matches a quick reply button flow
 function matchButton(text) {
@@ -202,8 +203,12 @@ function matchButton(text) {
   if (t === 'ไว้ก่อน') return 'NOT_NOW';
 
   // Post-booking
+  if (t === 'จองผ่านบอท') return 'BOOK_DATE_PICK';
   if (t === 'รับโค้ดชวนเพื่อน') return 'GET_REFERRAL';
   if (t === 'ดูรอบเรียน') return 'VIEW_SCHEDULE';
+
+  // Booking date selection
+  if (/^(เสาร์นี้|อาทิตย์นี้|สัปดาห์หน้า|พรุ่งนี้)$/.test(t)) return 'BOOK_DATE_CONFIRM';
 
   return null;
 }
@@ -373,6 +378,47 @@ async function handleButtonFlow(psid, text, pageToken, customerName, platform = 
         `ได้เลยค่ะ! ถ้าพร้อมเมื่อไหร่ทักมาได้ตลอดนะคะ 🙏\n\n💡 เพิ่มเพื่อน LINE @jiacpr ไว้ก่อนก็ได้ค่ะ จะได้ไม่พลาดโปร!\n📚 หรือลองเรียนออนไลน์ฟรีที่ jiacpr.com/online ค่ะ`,
         pageToken);
       return true;
+
+    case 'BOOK_DATE_PICK':
+      leadStore.update(psid, { bookingPending: true });
+      await sendQuickReply(psid,
+        `ยินดีช่วยจองค่ะ! 📅\nเลือกวันที่สะดวกได้เลยนะคะ\n(ทีมงานจะยืนยันรอบเวลาภายหลังค่ะ)`,
+        BOOK_DATE_BUTTONS, pageToken);
+      return true;
+
+    case 'BOOK_DATE_CONFIRM': {
+      const lead2 = leadStore.get(psid);
+      const dt = parseDateTimeFromText(text);
+      if (!dt) {
+        await sendText(psid,
+          `ขออภัยค่ะ ไม่สามารถระบุวันที่ได้\nกรุณาทักทีมโดยตรงที่ LINE @jiacpr เพื่อดูรอบที่ว่างค่ะ`,
+          pageToken);
+        return true;
+      }
+      leadStore.update(psid, { bookingDate: dt.dateStr, bookingTime: dt.timeStr });
+      await sendText(psid,
+        `รับทราบค่ะ! ขอจองวัน ${dt.dateStr} เวลา ${dt.timeStr} น.\n\nกำลังบันทึกนัดหมาย... 📝`,
+        pageToken);
+      const result = await createBooking({
+        name: customerName,
+        phone: '',
+        courseType: lead2?.type === 'corporate' ? 'อบรมองค์กร' : 'CPR Savelife',
+        dateStr: dt.dateStr,
+        timeStr: dt.timeStr,
+        platform: platformLabel,
+      });
+      if (result?.success) {
+        await sendText(psid,
+          `จองสำเร็จแล้วค่ะ! ✅\nทีมงานจะติดต่อยืนยันรายละเอียดทาง LINE @jiacpr นะคะ\n\nขอบคุณที่ไว้วางใจ JIA TRAINER CENTER ค่ะ 🙏`,
+          pageToken);
+        triggerHandoff({ customerName, platform, question: `📅 จองผ่านบอท: ${dt.dateStr} ${dt.timeStr}`, handoffType: 'SCHEDULE' }).catch(console.error);
+      } else {
+        await sendText(psid,
+          `ขออภัยค่ะ ระบบจองขัดข้องชั่วคราว\nกรุณาทักทีมที่ LINE @jiacpr เพื่อจองโดยตรงนะคะ 🙏`,
+          pageToken);
+      }
+      return true;
+    }
 
     case 'GET_REFERRAL': {
       const { code, count, discountBaht } = await getOrCreateCode(psid, 'messenger', customerName);

@@ -100,6 +100,15 @@
 .jia-chat-send:hover { background: ' + BRAND_LIGHT + '; }\
 .jia-chat-send:disabled { background: #a0aec0; cursor: not-allowed; }\
 .jia-chat-send svg { width: 18px; height: 18px; fill: #fff; }\
+.jia-quick-replies {\
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px 4px; background: ' + BRAND_BG + ';\
+}\
+.jia-qr-btn {\
+  background: #fff; border: 1.5px solid ' + BRAND_COLOR + '; color: ' + BRAND_COLOR + ';\
+  border-radius: 16px; padding: 5px 12px; font-size: 13px; cursor: pointer;\
+  white-space: nowrap; transition: all 0.15s;\
+}\
+.jia-qr-btn:hover { background: ' + BRAND_COLOR + '; color: #fff; }\
 @media (max-width: 480px) {\
   .jia-chat-window { bottom: 0; right: 0; width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0; }\
   .jia-chat-btn { bottom: 16px; right: 16px; width: 56px; height: 56px; }\
@@ -134,6 +143,7 @@
   <button class="jia-chat-close" aria-label="Close chat">&times;</button>\
 </div>\
 <div class="jia-chat-messages"></div>\
+<div class="jia-quick-replies" id="jiaQR" style="display:none"></div>\
 <div class="jia-chat-input-area">\
   <input class="jia-chat-input" type="text" placeholder="\u0E1E\u0E34\u0E21\u0E1E\u0E4C\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21\u0E17\u0E35\u0E48\u0E19\u0E35\u0E48..." maxlength="500" />\
   <button class="jia-chat-send" aria-label="Send"><svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>\
@@ -147,6 +157,26 @@
   var inputEl = win.querySelector('.jia-chat-input');
   var sendBtn = win.querySelector('.jia-chat-send');
   var closeBtn = win.querySelector('.jia-chat-close');
+  var qrEl = win.querySelector('#jiaQR');
+
+  // Render quick reply chips
+  function showQuickReplies(replies) {
+    if (!replies || !replies.length) { qrEl.style.display = 'none'; qrEl.innerHTML = ''; return; }
+    qrEl.innerHTML = '';
+    qrEl.style.display = 'flex';
+    replies.forEach(function(label) {
+      var btn = document.createElement('button');
+      btn.className = 'jia-qr-btn';
+      btn.textContent = label;
+      btn.addEventListener('click', function() {
+        inputEl.value = label;
+        qrEl.style.display = 'none';
+        qrEl.innerHTML = '';
+        sendMessage();
+      });
+      qrEl.appendChild(btn);
+    });
+  }
 
   // Typing indicator
   var typingEl = document.createElement('div');
@@ -166,7 +196,9 @@
       inputEl.focus();
       // Show welcome message on first open
       if (messagesEl.querySelectorAll('.jia-msg').length === 0) {
-        addMessage('bot', '\u0E2A\u0E27\u0E31\u0E2A\u0E14\u0E35\u0E04\u0E48\u0E30 \u0E22\u0E34\u0E19\u0E14\u0E35\u0E15\u0E49\u0E2D\u0E19\u0E23\u0E31\u0E1A\u0E04\u0E48\u0E30! \u0E19\u0E49\u0E2D\u0E07\u0E40\u0E08\u0E35\u0E22\u0E1E\u0E23\u0E49\u0E2D\u0E21\u0E15\u0E2D\u0E1A\u0E17\u0E38\u0E01\u0E04\u0E33\u0E16\u0E32\u0E21\u0E40\u0E01\u0E35\u0E48\u0E22\u0E27\u0E01\u0E31\u0E1A\u0E2B\u0E25\u0E31\u0E01\u0E2A\u0E39\u0E15\u0E23 CPR \u0E41\u0E25\u0E30 First Aid \u0E04\u0E48\u0E30 \u0E2A\u0E2D\u0E1A\u0E16\u0E32\u0E21\u0E44\u0E14\u0E49\u0E40\u0E25\u0E22\u0E04\u0E48\u0E30 \uD83D\uDE0A');
+        var welcome = '\u0E2A\u0E27\u0E31\u0E2A\u0E14\u0E35\u0E04\u0E48\u0E30! \u0E22\u0E34\u0E19\u0E14\u0E35\u0E15\u0E49\u0E2D\u0E19\u0E23\u0E31\u0E1A\u0E2A\u0E39\u0E48 JIA TRAINER CENTER \u0E19\u0E49\u0E2D\u0E07\u0E40\u0E08\u0E35\u0E22 AI Assistant \u0E1E\u0E23\u0E49\u0E2D\u0E21\u0E04\u0E48\u0E30 \u0E2A\u0E2D\u0E1A\u0E16\u0E32\u0E21\u0E44\u0E14\u0E49\u0E40\u0E25\u0E22\u0E19\u0E30\u0E04\u0E48\u0E30 \uD83D\uDE0A';
+        addMessage('bot', welcome);
+        showQuickReplies(['\u0E2D\u0E1A\u0E23\u0E21 CPR \u0E1A\u0E38\u0E04\u0E04\u0E25\u0E17\u0E31\u0E48\u0E27\u0E44\u0E1B', '\u0E08\u0E31\u0E14\u0E2D\u0E1A\u0E23\u0E21\u0E43\u0E19\u0E2D\u0E07\u0E04\u0E4C\u0E01\u0E23', '\u0E0B\u0E37\u0E49\u0E2D/\u0E40\u0E0A\u0E48\u0E32 AED']);
       }
     } else {
       win.classList.remove('open');
@@ -202,16 +234,20 @@
     sendBtn.disabled = true;
     setTyping(true);
 
+    var isFirstMsg = messagesEl.querySelectorAll('.jia-msg-user').length === 0;
+    showQuickReplies([]); // hide chips while sending
+
     fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: userId, message: text }),
+      body: JSON.stringify({ userId: userId, message: text, isFirst: isFirstMsg }),
     })
       .then(function (res) { return res.json(); })
       .then(function (data) {
         setTyping(false);
         if (data.reply) {
           addMessage('bot', data.reply);
+          showQuickReplies(data.quickReplies || []);
         } else if (data.error) {
           addMessage('bot', '\u0E02\u0E2D\u0E2D\u0E20\u0E31\u0E22\u0E04\u0E48\u0E30 \u0E40\u0E01\u0E34\u0E14\u0E02\u0E49\u0E2D\u0E1C\u0E34\u0E14\u0E1E\u0E25\u0E32\u0E14 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E25\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E2D\u0E35\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07\u0E04\u0E48\u0E30');
         }

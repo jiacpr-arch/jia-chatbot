@@ -1,5 +1,23 @@
 const { getAIResponse, checkHandoff } = require('./lib/ai');
 const { triggerHandoff } = require('./lib/handoff');
+const { getOrCreateCode, useReferralCode, extractCode } = require('./lib/referral');
+
+// Suggest quick reply chips based on bot response content
+function suggestQuickReplies(botText, isFirst) {
+  if (isFirst) return ['อบรม CPR บุคคลทั่วไป', 'จัดอบรมในองค์กร', 'ซื้อ/เช่า AED'];
+  const t = botText;
+  if (/สนใจเรื่องไหน|ต้องการอะไร|ช่วยอะไร|สวัสดี/.test(t))
+    return ['อบรม CPR บุคคลทั่วไป', 'จัดอบรมในองค์กร', 'ซื้อ/เช่า AED'];
+  if (/ช่วงไหน|สะดวกวัน|เวลาไหน|อยาก.*เรียน/.test(t))
+    return ['สัปดาห์นี้', 'สัปดาห์หน้า', 'เดือนหน้า', 'ยังไม่แน่ใจ'];
+  if (/กี่คน|จำนวน|คนขึ้นไป/.test(t))
+    return ['ไม่เกิน 7 คน', '10-15 คน', '15 คนขึ้นไป'];
+  if (/สนใจจอง|จองได้เลย|แอดไลน์|จองคอร์ส/.test(t))
+    return ['สนใจจอง', 'ขอข้อมูลเพิ่ม', 'ไว้ก่อน'];
+  if (/AED|เช่า|ซื้อ|แพ็กเกจ/.test(t))
+    return ['ให้โทรกลับ', 'ดูเว็บก่อน', 'ขอใบเสนอราคา'];
+  return [];
+}
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -57,10 +75,22 @@ module.exports = async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
     try {
-      const { userId, message } = req.body || {};
+      const { userId, message, isFirst } = req.body || {};
 
       if (!userId || !message) {
         return res.status(400).json({ error: 'userId and message are required' });
+      }
+
+      // Check for referral code in free text
+      const refCode = extractCode(message);
+      if (refCode) {
+        const result = await useReferralCode(refCode, userId, 'webchat');
+        if (result) {
+          return res.status(200).json({
+            reply: `ยืนยันโค้ด ${refCode} แล้วค่ะ! 🎉\nคุณได้รับส่วนลด ฿100 สำหรับคอร์สแรกนะคะ\nแจ้งโค้ดนี้เมื่อจองกับทีมงานได้เลยค่ะ 💛`,
+            quickReplies: ['สนใจจอง', 'อบรม CPR บุคคลทั่วไป'],
+          });
+        }
       }
 
       // Get AI response
@@ -72,6 +102,9 @@ module.exports = async function handler(req, res) {
       // Detect and strip [INTENT:POST_COURSE]
       const finalText = cleanText.replace(/\[INTENT:POST_COURSE\]/g, '').trim();
 
+      // Suggest quick reply chips based on response content
+      const quickReplies = suggestQuickReplies(finalText, !!isFirst);
+
       // Trigger handoff notification if needed
       if (hasHandoff) {
         triggerHandoff({
@@ -82,7 +115,7 @@ module.exports = async function handler(req, res) {
         }).catch(console.error);
       }
 
-      return res.status(200).json({ reply: finalText });
+      return res.status(200).json({ reply: finalText, quickReplies });
     } catch (err) {
       console.error('[WebChat] Error:', err);
       return res.status(500).json({ error: 'Internal server error' });

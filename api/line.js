@@ -7,6 +7,7 @@ const { logLeadToSheet } = require('./lib/sheets');
 const { scheduleFollowUp, schedulePostCourseFollowUp, cancelFollowUp, onUserReply } = require('./lib/follow-up');
 const { getOrCreateCode, useReferralCode, extractCode } = require('./lib/referral');
 const { getWelcomeMessage, recordConversion, recordImpression } = require('./lib/ab-test');
+const { createBooking, parseDateTimeFromText } = require('./lib/calendar');
 
 const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
 const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
@@ -124,7 +125,8 @@ const CORPORATE_SIZE_BUTTONS = ['ไม่เกิน 7 คน', '10-15 คน'
 const STUDENT_TYPE_BUTTONS = ['นักเรียน/นักศึกษา', 'นักศึกษาแพทย์', 'นักศึกษาเภสัช'];
 const AED_BUTTONS = ['ให้โทรกลับ', 'ดูเว็บก่อน'];
 const YES_NO_BUTTONS = ['สนใจจอง', 'ขอข้อมูลเพิ่ม', 'ไว้ก่อน'];
-const AFTER_BOOKING_BUTTONS = ['รับโค้ดชวนเพื่อน', 'ดูรอบเรียน'];
+const AFTER_BOOKING_BUTTONS = ['จองผ่านบอท', 'รับโค้ดชวนเพื่อน', 'ดูรอบเรียน'];
+const BOOK_DATE_BUTTONS = ['เสาร์นี้', 'อาทิตย์นี้', 'สัปดาห์หน้า', 'เลือกวันอื่น'];
 
 function matchButton(text) {
   const t = text.trim();
@@ -146,8 +148,10 @@ function matchButton(text) {
   if (t === 'สนใจจอง') return 'WANT_BOOKING';
   if (t === 'ขอข้อมูลเพิ่ม') return 'WANT_INFO';
   if (t === 'ไว้ก่อน') return 'NOT_NOW';
+  if (t === 'จองผ่านบอท') return 'BOOK_DATE_PICK';
   if (t === 'รับโค้ดชวนเพื่อน') return 'GET_REFERRAL';
   if (t === 'ดูรอบเรียน') return 'VIEW_SCHEDULE';
+  if (/^(เสาร์นี้|อาทิตย์นี้|สัปดาห์หน้า|พรุ่งนี้)$/.test(t)) return 'BOOK_DATE_CONFIRM';
   return null;
 }
 
@@ -291,6 +295,43 @@ async function handleButtonFlow(userId, text, replyToken, customerName) {
       await replyText(replyToken,
         `ได้เลยค่ะ! ถ้าพร้อมเมื่อไหร่ทักมาได้ตลอดนะคะ 🙏\n\n💡 เพิ่มเพื่อน LINE @jiacpr ไว้ก่อนก็ได้ค่ะ จะได้ไม่พลาดโปร!\n📚 หรือลองเรียนออนไลน์ฟรีที่ jiacpr.com/online ค่ะ`);
       return true;
+
+    case 'BOOK_DATE_PICK':
+      leadStore.update(userId, { bookingPending: true });
+      await replyQuickReply(replyToken,
+        `ยินดีช่วยจองค่ะ! 📅\nเลือกวันที่สะดวกได้เลยนะคะ\n(ทีมงานจะยืนยันรอบเวลาภายหลังค่ะ)`,
+        BOOK_DATE_BUTTONS);
+      return true;
+
+    case 'BOOK_DATE_CONFIRM': {
+      const dt = parseDateTimeFromText(text);
+      if (!dt) {
+        await replyText(replyToken,
+          `ขออภัยค่ะ ไม่สามารถระบุวันที่ได้\nกรุณาทักทีมโดยตรงที่ LINE @jiacpr เพื่อดูรอบที่ว่างค่ะ`);
+        return true;
+      }
+      leadStore.update(userId, { bookingDate: dt.dateStr, bookingTime: dt.timeStr });
+      await replyText(replyToken,
+        `รับทราบค่ะ! ขอจองวัน ${dt.dateStr} เวลา ${dt.timeStr} น.\nกำลังบันทึกนัดหมาย... 📝`);
+      const bResult = await createBooking({
+        name: customerName,
+        phone: '',
+        courseType: lead?.type === 'corporate' ? 'อบรมองค์กร' : 'CPR Savelife',
+        dateStr: dt.dateStr,
+        timeStr: dt.timeStr,
+        platform: 'LINE OA',
+      });
+      // Push confirmation (can't reply twice, so use push)
+      const pushUrl = '/v2/bot/message/push';
+      const pushMsg = bResult?.success
+        ? `จองสำเร็จแล้วค่ะ! ✅\nทีมงานจะติดต่อยืนยันรายละเอียดทาง LINE นะคะ\nขอบคุณที่ไว้วางใจ JIA TRAINER CENTER ค่ะ 🙏`
+        : `ขออภัยค่ะ ระบบจองขัดข้องชั่วคราว\nกรุณาทักทีมที่ LINE @jiacpr เพื่อจองโดยตรงนะคะ 🙏`;
+      lineRequest(pushUrl, { to: userId, messages: [{ type: 'text', text: pushMsg }] }).catch(console.error);
+      if (bResult?.success) {
+        triggerHandoff({ customerName, platform: 'LINE OA', question: `📅 จองผ่านบอท: ${dt.dateStr} ${dt.timeStr}`, handoffType: 'SCHEDULE' }).catch(console.error);
+      }
+      return true;
+    }
 
     case 'GET_REFERRAL': {
       const { code, count, discountBaht } = await getOrCreateCode(userId, 'line', customerName);
