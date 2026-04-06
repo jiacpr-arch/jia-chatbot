@@ -69,6 +69,31 @@ function replyQuickReply(replyToken, text, buttons) {
   });
 }
 
+function replyImage(replyToken, imageUrl) {
+  return lineRequest('/v2/bot/message/reply', {
+    replyToken,
+    messages: [{
+      type: 'image',
+      originalContentUrl: imageUrl,
+      previewImageUrl: imageUrl,
+    }],
+  });
+}
+
+function replyCarousel(replyToken, columns) {
+  return lineRequest('/v2/bot/message/reply', {
+    replyToken,
+    messages: [{
+      type: 'template',
+      altText: 'แพ็กเกจ AED',
+      template: {
+        type: 'carousel',
+        columns: columns.slice(0, 10),
+      },
+    }],
+  });
+}
+
 function getUserProfile(userId) {
   return new Promise((resolve) => {
     const req = https.request({
@@ -144,9 +169,11 @@ async function handleButtonFlow(userId, text, replyToken, customerName) {
 
     case 'AED':
       leadStore.update(userId, { type: 'aed', name: customerName });
+      // LINE carousel needs reply, can't mix with quick reply in same reply
+      // So just use text with details instead
       await replyQuickReply(replyToken,
-        `เรามีบริการขายและเช่า AED ค่ะ\n- เช่ารายวัน: เริ่มต้น ฿999/วัน\n- เช่ารายเดือน: ฿5,999/เดือน\n- ผ่อนเป็นเจ้าของ: มัดจำ ฿15,000 + ฿2,500/เดือน\n\nดูรายละเอียดที่ jia1669.com หรือให้ทีมโทรกลับแนะนำคะ?`,
-        AED_BUTTONS);
+        `เรามีบริการขายและเช่า AED ค่ะ\n\n🔹 Safety Premium: ซื้อขาด ฿69,000\n🔹 Safety Start: ผ่อน ฿2,500/เดือน (18 เดือน)\n🔹 เช่ารายวัน: เริ่มต้น ฿999/วัน\n🔹 เช่ารายเดือน: ฿5,999/เดือน\n\nดูรายละเอียดที่ jia1669.com หรือให้ทีมโทรกลับแนะนำคะ?`,
+        ['ให้โทรกลับ', 'ดูเว็บก่อน']);
       return true;
 
     case 'HOT_LEAD':

@@ -62,6 +62,35 @@ function sendQuickReply(psid, text, buttons, pageToken) {
   }, pageToken);
 }
 
+function sendImage(psid, imageUrl, pageToken) {
+  return fbSend({
+    messaging_type: 'RESPONSE',
+    recipient: { id: psid },
+    message: {
+      attachment: {
+        type: 'image',
+        payload: { url: imageUrl, is_reusable: true }
+      }
+    }
+  }, pageToken);
+}
+
+function sendCarousel(psid, elements, pageToken) {
+  return fbSend({
+    messaging_type: 'RESPONSE',
+    recipient: { id: psid },
+    message: {
+      attachment: {
+        type: 'template',
+        payload: {
+          template_type: 'generic',
+          elements: elements.slice(0, 10)  // FB max 10
+        }
+      }
+    }
+  }, pageToken);
+}
+
 function sendTypingOn(psid, pageToken) {
   fbSend({ messaging_type: 'RESPONSE', recipient: { id: psid }, sender_action: 'typing_on' }, pageToken).catch(() => {});
 }
@@ -154,9 +183,29 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
 
     case 'AED':
       leadStore.update(psid, { type: 'aed', name: customerName });
+      await sendCarousel(psid, [
+        {
+          title: 'Safety Premium — ซื้อขาด',
+          subtitle: '฿69,000 (ปกติ ฿98,988)\nเป็นเจ้าของ Yuwell AED ทันที',
+          image_url: 'https://www.jiacpr.com/uploads/images/aed-yuwell.jpg',
+          buttons: [{ type: 'web_url', url: 'https://jia1669.com', title: 'ดูรายละเอียด' }]
+        },
+        {
+          title: 'Safety Start — ผ่อน 18 เดือน',
+          subtitle: 'มัดจำ ฿15,000 + ฿2,500/เดือน\nครบสัญญาเป็นเจ้าของ',
+          image_url: 'https://www.jiacpr.com/uploads/images/aed-yuwell.jpg',
+          buttons: [{ type: 'web_url', url: 'https://jia1669.com', title: 'ดูรายละเอียด' }]
+        },
+        {
+          title: 'เช่า AED รายวัน',
+          subtitle: 'เริ่มต้น ฿999/วัน\nเหมาะสำหรับงาน event',
+          image_url: 'https://www.jiacpr.com/uploads/images/aed-yuwell.jpg',
+          buttons: [{ type: 'web_url', url: 'https://jia1669.com', title: 'ดูรายละเอียด' }]
+        }
+      ], pageToken);
       await sendQuickReply(psid,
-        `เรามีบริการขายและเช่า AED ค่ะ\n- เช่า AED เริ่มต้น ฿690\n- ขาย AED ราคาพิเศษสำหรับองค์กร\n\nดูรายละเอียดได้ที่ jia1669.com หรือให้ทีมโทรกลับแนะนำรุ่นที่เหมาะกับองค์กรคะ?`,
-        AED_BUTTONS, pageToken);
+        `สนใจแพ็กเกจไหนคะ? หรือให้ทีมโทรกลับแนะนำรุ่นที่เหมาะกับองค์กรคะ?`,
+        ['ให้โทรกลับ', 'ดูเว็บก่อน'], pageToken);
       return true;
 
     case 'HOT_LEAD':

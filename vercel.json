@@ -6,6 +6,9 @@
     { "src": "/api/test", "dest": "/api/test.js" },
     { "src": "/api/leadgen", "dest": "/api/leadgen.js" },
     { "src": "/api/cron/follow-up", "dest": "/api/cron/follow-up.js" },
+    { "src": "/api/broadcast", "dest": "/api/broadcast.js" },
+    { "src": "/api/webchat", "dest": "/api/webchat.js" },
+    { "src": "/chat-widget.js", "dest": "/public/chat-widget.js" },
     { "src": "/(.*)", "dest": "/api/index.js" }
   ],
   "crons": [
