@@ -11,6 +11,7 @@
 
 const https = require('https');
 const { getAIResponse, checkHandoff } = require('./lib/ai');
+const { SYSTEM_PROMPT_MORROO } = require('./lib/system-prompt-morroo');
 const { triggerHandoff } = require('./lib/handoff');
 const { leadStore } = require('./lib/lead-store');
 const { schedulePostCourseFollowUp, onUserReply } = require('./lib/follow-up');
@@ -69,7 +70,7 @@ module.exports = async (req, res) => {
     if (!lead) leadStore.update(userId, { name: customerName });
 
     onUserReply(userId);
-    const aiResponse = await getAIResponse(userId, text, lead?.level || null);
+    const aiResponse = await getAIResponse(userId, text, lead?.level || null, SYSTEM_PROMPT_MORROO);
     const { hasHandoff, type, cleanText } = checkHandoff(aiResponse);
 
     const postCourseMatch = aiResponse.match(/\[INTENT:POST_COURSE\]/);

@@ -56,7 +56,7 @@ function chooseModel(history, leadLevel) {
  * @param {string|null} leadLevel - ระดับ lead (hot/warm/cold/null)
  * @returns {Promise<string>} - คำตอบจาก AI
  */
-async function getAIResponse(userId, userMessage, leadLevel) {
+async function getAIResponse(userId, userMessage, leadLevel, customSystemPrompt = null) {
   const history = getHistory(userId);
 
   const messages = [
@@ -70,7 +70,7 @@ async function getAIResponse(userId, userMessage, leadLevel) {
   const response = await client.messages.create({
     model,
     max_tokens: model === MODEL_SONNET ? 700 : 500,
-    system: SYSTEM_PROMPT,
+    system: customSystemPrompt || SYSTEM_PROMPT,
     messages,
   });
 

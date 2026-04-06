@@ -15,6 +15,7 @@
 
 const https = require('https');
 const { getAIResponse, checkHandoff } = require('./lib/ai');
+const { SYSTEM_PROMPT_ROODEE } = require('./lib/system-prompt-roodee');
 const { triggerHandoff } = require('./lib/handoff');
 const { leadStore } = require('./lib/lead-store');
 const { logLeadToSheet } = require('./lib/sheets');
@@ -77,7 +78,7 @@ module.exports = async (req, res) => {
     if (!lead) leadStore.update(userId, { name: customerName });
 
     onUserReply(userId);
-    const aiResponse = await getAIResponse(userId, text, lead?.level || null);
+    const aiResponse = await getAIResponse(userId, text, lead?.level || null, SYSTEM_PROMPT_ROODEE);
     const { hasHandoff, type, cleanText } = checkHandoff(aiResponse);
 
     // ตรวจ POST_COURSE intent
