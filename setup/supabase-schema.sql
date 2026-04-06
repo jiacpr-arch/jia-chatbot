@@ -37,3 +37,31 @@ ALTER TABLE chatbot_followups ADD COLUMN IF NOT EXISTS platform TEXT DEFAULT 'me
 -- Index สำหรับ query follow-ups ที่ active
 CREATE INDEX IF NOT EXISTS idx_followups_active ON chatbot_followups (status) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_followups_psid ON chatbot_followups (psid);
+
+-- ตาราง referrals (ระบบชวนเพื่อน)
+CREATE TABLE IF NOT EXISTS chatbot_referrals (
+  id BIGSERIAL PRIMARY KEY,
+  user_id TEXT NOT NULL UNIQUE,
+  platform TEXT DEFAULT 'messenger',  -- 'messenger' | 'line'
+  user_name TEXT,
+  code TEXT NOT NULL UNIQUE,           -- e.g. JIA12345
+  referral_count INTEGER DEFAULT 0,   -- จำนวนคนที่ชวนมาได้
+  discount_baht INTEGER DEFAULT 0,    -- เครดิตสะสม (฿50 ต่อคน)
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ตาราง referral_uses (บันทึกการใช้โค้ด)
+CREATE TABLE IF NOT EXISTS chatbot_referral_uses (
+  id BIGSERIAL PRIMARY KEY,
+  code TEXT NOT NULL,
+  referrer_id TEXT NOT NULL,
+  new_user_id TEXT NOT NULL,
+  platform TEXT,
+  referrer_reward INTEGER DEFAULT 50,
+  new_user_discount INTEGER DEFAULT 100,
+  used_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_referrals_user ON chatbot_referrals (user_id);
+CREATE INDEX IF NOT EXISTS idx_referrals_code ON chatbot_referrals (code);
+CREATE INDEX IF NOT EXISTS idx_referral_uses_code ON chatbot_referral_uses (code);

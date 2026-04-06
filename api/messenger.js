@@ -5,6 +5,8 @@ const { triggerHandoff } = require('./lib/handoff');
 const { leadStore } = require('./lib/lead-store');
 const { logLeadToSheet } = require('./lib/sheets');
 const { scheduleFollowUp, schedulePostCourseFollowUp, cancelFollowUp, onUserReply } = require('./lib/follow-up');
+const { getOrCreateCode, useReferralCode, extractCode } = require('./lib/referral');
+const { createBooking, parseDateTimeFromText } = require('./lib/calendar');
 
 const FB_VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN || 'jia_chatbot_verify_2026';
 const FB_APP_SECRET = process.env.FB_APP_SECRET;
@@ -95,6 +97,35 @@ function sendTypingOn(psid, pageToken) {
   fbSend({ messaging_type: 'RESPONSE', recipient: { id: psid }, sender_action: 'typing_on' }, pageToken).catch(() => {});
 }
 
+/**
+ * ส่ง Private Reply ตอบกลับ comment บน FB Post
+ * ต้องการ permission: pages_manage_posts
+ */
+function sendPrivateReply(commentId, message, pageToken) {
+  return new Promise((resolve) => {
+    const body = JSON.stringify({ message });
+    const req = https.request(
+      {
+        hostname: 'graph.facebook.com',
+        path: `/v21.0/${commentId}/private_replies?access_token=${encodeURIComponent(pageToken)}`,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (c) => (data += c));
+        res.on('end', () => {
+          if (res.statusCode !== 200) console.error('[Private Reply]', res.statusCode, data.slice(0, 200));
+          resolve(data);
+        });
+      }
+    );
+    req.on('error', (err) => { console.error('[Private Reply Error]', err.message); resolve(); });
+    req.write(body);
+    req.end();
+  });
+}
+
 function getUserName(psid, pageToken) {
   return new Promise((resolve) => {
     const req = https.request({
@@ -121,6 +152,7 @@ const CORPORATE_SIZE_BUTTONS = ['ไม่เกิน 7 คน', '10-15 คน'
 const STUDENT_TYPE_BUTTONS = ['นักเรียน/นักศึกษา', 'นักศึกษาแพทย์', 'นักศึกษาเภสัช'];
 const AED_BUTTONS = ['ให้โทรกลับ', 'ดูเว็บก่อน'];
 const YES_NO_BUTTONS = ['สนใจจอง', 'ขอข้อมูลเพิ่ม', 'ไว้ก่อน'];
+const AFTER_BOOKING_BUTTONS = ['รับโค้ดชวนเพื่อน', 'ดูรอบเรียน'];
 
 // Check if message matches a quick reply button flow
 function matchButton(text) {
@@ -155,6 +187,10 @@ function matchButton(text) {
   if (t === 'สนใจจอง') return 'WANT_BOOKING';
   if (t === 'ขอข้อมูลเพิ่ม') return 'WANT_INFO';
   if (t === 'ไว้ก่อน') return 'NOT_NOW';
+
+  // Post-booking
+  if (t === 'รับโค้ดชวนเพื่อน') return 'GET_REFERRAL';
+  if (t === 'ดูรอบเรียน') return 'VIEW_SCHEDULE';
 
   return null;
 }
@@ -212,9 +248,9 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
       leadStore.update(psid, { level: 'hot', timing: text });
       cancelFollowUp(psid);
       logLeadToSheet({ name: customerName, psid, type: lead?.type || 'individual', level: 'hot', timing: text, source: 'messenger_bot' }).catch(console.error);
-      await sendText(psid,
-        `เยี่ยมเลยค่ะ! 🎉\n\nจองคอร์สได้เลย:\n👉 แอดไลน์ @jiacpr (ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n👉 เว็บ www.jiacpr.com\n\n💡 เรียนออนไลน์ฟรีก่อนที่ jiacpr.com/online แล้วมาเรียน hands-on ลดเหลือ ฿400 ค่ะ!\n\nมีคำถามเพิ่มเติมพิมพ์ถามได้เลยนะคะ`,
-        pageToken);
+      await sendQuickReply(psid,
+        `เยี่ยมเลยค่ะ! 🎉\n\nจองคอร์สได้เลย:\n👉 แอดไลน์ @jiacpr (ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n\n💳 ชำระผ่าน PromptPay: 088-558-8078 (฿500)\n💡 เรียนออนไลน์ฟรีก่อนที่ jiacpr.com/online แล้วมาเรียน hands-on ลดเหลือ ฿400 ค่ะ!`,
+        AFTER_BOOKING_BUTTONS, pageToken);
       // Alert team for hot lead
       triggerHandoff({ customerName, platform: 'Facebook Messenger', question: `🔥 HOT LEAD — สนใจ${text} (CPR บุคคลทั่วไป)`, handoffType: 'HOT_LEAD' }).catch(console.error);
       return true;
@@ -306,9 +342,9 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
       leadStore.update(psid, { level: 'hot' });
       cancelFollowUp(psid);
       logLeadToSheet({ name: customerName, psid, type: lead?.type || 'individual', level: 'hot', message: 'สนใจจอง', source: 'messenger_bot' }).catch(console.error);
-      await sendText(psid,
-        `เยี่ยมเลยค่ะ! 🎉 จองได้เลย:\n\n👉 แอดไลน์ @jiacpr (แนะนำ — ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n👉 เว็บ www.jiacpr.com\n\nทีมงานพร้อมช่วยดูแลค่ะ!`,
-        pageToken);
+      await sendQuickReply(psid,
+        `เยี่ยมเลยค่ะ! 🎉 จองได้เลย:\n\n👉 แอดไลน์ @jiacpr (แนะนำ — ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n\n💳 ชำระผ่าน PromptPay: 088-558-8078\nหรือโอนธนาคารแล้วส่งสลิปทาง LINE ได้เลยค่ะ`,
+        AFTER_BOOKING_BUTTONS, pageToken);
       triggerHandoff({ customerName, platform: 'Facebook Messenger', question: `✅ สนใจจอง (${lead?.type || 'ทั่วไป'})`, handoffType: 'HOT_LEAD' }).catch(console.error);
       return true;
 
@@ -321,6 +357,21 @@ async function handleButtonFlow(psid, text, pageToken, customerName) {
       await sendText(psid,
         `ได้เลยค่ะ! ถ้าพร้อมเมื่อไหร่ทักมาได้ตลอดนะคะ 🙏\n\n💡 เพิ่มเพื่อน LINE @jiacpr ไว้ก่อนก็ได้ค่ะ จะได้ไม่พลาดโปร!\n📚 หรือลองเรียนออนไลน์ฟรีที่ jiacpr.com/online ค่ะ`,
         pageToken);
+      return true;
+
+    case 'GET_REFERRAL': {
+      const { code, count, discountBaht } = await getOrCreateCode(psid, 'messenger', customerName);
+      await sendText(psid,
+        `โค้ดชวนเพื่อนของคุณค่ะ 🎁\n\n🔑 โค้ด: ${code}\n\nวิธีใช้:\n1. แชร์โค้ดให้เพื่อน\n2. เพื่อนทักบอทแล้วพิมพ์โค้ดนี้\n3. เพื่อนได้ส่วนลด ฿100 ค่ะ!\n4. คุณได้รับเครดิต ฿50 ทุกคนที่แนะนำ 💛\n\n📊 สถิติ: ชวนไปแล้ว ${count} คน / เครดิตรวม ฿${discountBaht}\n\n(ใช้เครดิตได้เมื่อจองคอร์สครั้งถัดไปค่ะ)`,
+        pageToken);
+      return true;
+    }
+
+    case 'VIEW_SCHEDULE':
+      await sendText(psid,
+        `ดูตารางเรียนทุกรอบได้ที่ 👉 www.jiacpr.com/schedule\nหรือทักทีมผ่าน LINE @jiacpr เพื่อดูรอบที่ว่างค่ะ 📅`,
+        pageToken);
+      triggerHandoff({ customerName, platform: 'Facebook Messenger', question: '📅 ขอดูตารางเรียน', handoffType: 'SCHEDULE' }).catch(console.error);
       return true;
 
     default:
@@ -359,6 +410,38 @@ module.exports = async (req, res) => {
           continue;
         }
 
+        // ---- Handle FB Post comments (feed events) ----
+        for (const change of entry.changes || []) {
+          if (change.field !== 'feed') continue;
+          const val = change.value;
+
+          // Only process new comments (not likes, shares, or page's own comments)
+          if (val.item !== 'comment' || val.verb !== 'add') continue;
+          if (!val.comment_id || val.from?.id === pageId) continue;
+
+          const commentId = val.comment_id;
+          const commenterName = val.from?.name || 'ลูกค้า';
+          const commentText = (val.message || '').slice(0, 200);
+
+          console.log(`[FB Comment] ${commenterName}: ${commentText}`);
+
+          // Send private DM reply to the commenter
+          await sendPrivateReply(commentId,
+            `สวัสดีค่ะ คุณ${commenterName}! 🙏 ขอบคุณที่สนใจ JIA TRAINER CENTER นะคะ\n\nน้องเจีย AI Assistant พร้อมช่วยดูแลค่ะ ทักมาคุยในกล่องข้อความนี้ได้เลยนะคะ หรือพิมพ์สวัสดีเพื่อเริ่มต้น 😊\n\n📞 โทร 088-558-8078 | LINE @jiacpr`,
+          ).catch((err) => console.error('[FB Comment Reply Error]', err.message));
+
+          // Alert team if comment seems like a buying intent
+          const buyKeywords = /จอง|สมัคร|ราคา|เท่าไร|กี่บาท|เรียน|อบรม|AED|ซื้อ|เช่า/i;
+          if (buyKeywords.test(commentText)) {
+            triggerHandoff({
+              customerName: commenterName,
+              platform: 'Facebook Post Comment',
+              question: commentText,
+              handoffType: 'HOT_LEAD',
+            }).catch(console.error);
+          }
+        }
+
         for (const event of entry.messaging || []) {
           // Handle postbacks (button clicks)
           const postbackPayload = event.postback?.payload;
@@ -385,6 +468,23 @@ module.exports = async (req, res) => {
           // Try structured button flow first
           const handled = await handleButtonFlow(psid, text, pageToken, customerName);
           if (handled) continue;
+
+          // Check for referral code in free text (e.g. "มีโค้ด JIA12345")
+          const refCode = extractCode(text);
+          if (refCode) {
+            const result = await useReferralCode(refCode, psid, 'messenger');
+            if (result) {
+              await sendText(psid,
+                `ยืนยันโค้ด ${refCode} แล้วค่ะ! 🎉\nคุณได้รับส่วนลด ฿100 สำหรับคอร์สแรกนะคะ\nแจ้งโค้ดนี้เมื่อจองกับทีมงานได้เลยค่ะ 💛`,
+                pageToken);
+              continue;
+            } else {
+              await sendText(psid,
+                `ขออภัยค่ะ ไม่พบโค้ด "${refCode}" ในระบบ\nกรุณาตรวจสอบโค้ดอีกครั้งนะคะ`,
+                pageToken);
+              continue;
+            }
+          }
 
           // Fall through to AI for free-text conversation
           onUserReply(psid);

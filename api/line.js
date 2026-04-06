@@ -5,6 +5,7 @@ const { triggerHandoff } = require('./lib/handoff');
 const { leadStore } = require('./lib/lead-store');
 const { logLeadToSheet } = require('./lib/sheets');
 const { scheduleFollowUp, schedulePostCourseFollowUp, cancelFollowUp, onUserReply } = require('./lib/follow-up');
+const { getOrCreateCode, useReferralCode, extractCode } = require('./lib/referral');
 
 const LINE_CHANNEL_SECRET = process.env.LINE_CHANNEL_SECRET;
 const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
@@ -121,6 +122,7 @@ const CORPORATE_SIZE_BUTTONS = ['ไม่เกิน 7 คน', '10-15 คน'
 const STUDENT_TYPE_BUTTONS = ['นักเรียน/นักศึกษา', 'นักศึกษาแพทย์', 'นักศึกษาเภสัช'];
 const AED_BUTTONS = ['ให้โทรกลับ', 'ดูเว็บก่อน'];
 const YES_NO_BUTTONS = ['สนใจจอง', 'ขอข้อมูลเพิ่ม', 'ไว้ก่อน'];
+const AFTER_BOOKING_BUTTONS = ['รับโค้ดชวนเพื่อน', 'ดูรอบเรียน'];
 
 function matchButton(text) {
   const t = text.trim();
@@ -142,6 +144,8 @@ function matchButton(text) {
   if (t === 'สนใจจอง') return 'WANT_BOOKING';
   if (t === 'ขอข้อมูลเพิ่ม') return 'WANT_INFO';
   if (t === 'ไว้ก่อน') return 'NOT_NOW';
+  if (t === 'รับโค้ดชวนเพื่อน') return 'GET_REFERRAL';
+  if (t === 'ดูรอบเรียน') return 'VIEW_SCHEDULE';
   return null;
 }
 
@@ -180,8 +184,9 @@ async function handleButtonFlow(userId, text, replyToken, customerName) {
       leadStore.update(userId, { level: 'hot', timing: text });
       cancelFollowUp(userId);
       logLeadToSheet({ name: customerName, psid: userId, type: lead?.type || 'individual', level: 'hot', timing: text, source: 'line_bot' }).catch(console.error);
-      await replyText(replyToken,
-        `เยี่ยมเลยค่ะ! 🎉\n\nจองคอร์สได้เลย:\n👉 แอดไลน์ @jiacpr (ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n👉 เว็บ www.jiacpr.com\n\n💡 เรียนออนไลน์ฟรีก่อนที่ jiacpr.com/online แล้วมาเรียน hands-on ลดเหลือ ฿400 ค่ะ!`);
+      await replyQuickReply(replyToken,
+        `เยี่ยมเลยค่ะ! 🎉\n\nจองคอร์สได้เลย:\n👉 แอดไลน์ @jiacpr (ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n\n💳 ชำระผ่าน PromptPay: 088-558-8078 (฿500)\n💡 เรียนออนไลน์ฟรีก่อนที่ jiacpr.com/online แล้วมาเรียน hands-on ลดเหลือ ฿400 ค่ะ!`,
+        AFTER_BOOKING_BUTTONS);
       triggerHandoff({ customerName, platform: 'LINE OA', question: `🔥 HOT LEAD — สนใจ${text}`, handoffType: 'HOT_LEAD' }).catch(console.error);
       return true;
 
@@ -268,8 +273,9 @@ async function handleButtonFlow(userId, text, replyToken, customerName) {
       leadStore.update(userId, { level: 'hot' });
       cancelFollowUp(userId);
       logLeadToSheet({ name: customerName, psid: userId, type: lead?.type || 'individual', level: 'hot', message: 'สนใจจอง', source: 'line_bot' }).catch(console.error);
-      await replyText(replyToken,
-        `เยี่ยมเลยค่ะ! 🎉 จองได้เลย:\n\n👉 แอดไลน์ @jiacpr (แนะนำ — ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n👉 เว็บ www.jiacpr.com\n\nทีมงานพร้อมช่วยดูแลค่ะ!`);
+      await replyQuickReply(replyToken,
+        `เยี่ยมเลยค่ะ! 🎉 จองได้เลย:\n\n👉 แอดไลน์ @jiacpr (แนะนำ — ตอบเร็ว จองง่าย)\n👉 โทร 088-558-8078\n\n💳 ชำระผ่าน PromptPay: 088-558-8078\nหรือโอนธนาคารแล้วส่งสลิปทาง LINE ได้เลยค่ะ`,
+        AFTER_BOOKING_BUTTONS);
       triggerHandoff({ customerName, platform: 'LINE OA', question: `✅ สนใจจอง (${lead?.type || 'ทั่วไป'})`, handoffType: 'HOT_LEAD' }).catch(console.error);
       return true;
 
@@ -280,6 +286,19 @@ async function handleButtonFlow(userId, text, replyToken, customerName) {
       leadStore.update(userId, { level: 'cold' });
       await replyText(replyToken,
         `ได้เลยค่ะ! ถ้าพร้อมเมื่อไหร่ทักมาได้ตลอดนะคะ 🙏\n\n💡 เพิ่มเพื่อน LINE @jiacpr ไว้ก่อนก็ได้ค่ะ จะได้ไม่พลาดโปร!\n📚 หรือลองเรียนออนไลน์ฟรีที่ jiacpr.com/online ค่ะ`);
+      return true;
+
+    case 'GET_REFERRAL': {
+      const { code, count, discountBaht } = await getOrCreateCode(userId, 'line', customerName);
+      await replyText(replyToken,
+        `โค้ดชวนเพื่อนของคุณค่ะ 🎁\n\n🔑 โค้ด: ${code}\n\nวิธีใช้:\n1. แชร์โค้ดให้เพื่อน\n2. เพื่อนทักบอทแล้วพิมพ์โค้ดนี้\n3. เพื่อนได้ส่วนลด ฿100 ค่ะ!\n4. คุณได้รับเครดิต ฿50 ทุกคนที่แนะนำ 💛\n\n📊 สถิติ: ชวนไปแล้ว ${count} คน / เครดิตรวม ฿${discountBaht}\n\n(ใช้เครดิตได้เมื่อจองคอร์สครั้งถัดไปค่ะ)`);
+      return true;
+    }
+
+    case 'VIEW_SCHEDULE':
+      await replyText(replyToken,
+        `ดูตารางเรียนทุกรอบได้ที่ 👉 www.jiacpr.com/schedule\nหรือทักทีมผ่าน LINE @jiacpr เพื่อดูรอบที่ว่างค่ะ 📅`);
+      triggerHandoff({ customerName, platform: 'LINE OA', question: '📅 ขอดูตารางเรียน', handoffType: 'SCHEDULE' }).catch(console.error);
       return true;
 
     default:
@@ -337,6 +356,20 @@ module.exports = async (req, res) => {
       // Button flow ก่อน
       const handled = await handleButtonFlow(userId, text, replyToken, customerName);
       if (handled) continue;
+
+      // Check for referral code in free text (e.g. "มีโค้ด JIA12345")
+      const refCode = extractCode(text);
+      if (refCode) {
+        const result = await useReferralCode(refCode, userId, 'line');
+        if (result) {
+          await replyText(replyToken,
+            `ยืนยันโค้ด ${refCode} แล้วค่ะ! 🎉\nคุณได้รับส่วนลด ฿100 สำหรับคอร์สแรกนะคะ\nแจ้งโค้ดนี้เมื่อจองกับทีมงานได้เลยค่ะ 💛`);
+        } else {
+          await replyText(replyToken,
+            `ขออภัยค่ะ ไม่พบโค้ด "${refCode}" ในระบบ\nกรุณาตรวจสอบโค้ดอีกครั้งนะคะ`);
+        }
+        continue;
+      }
 
       // AI สำหรับ free-text
       onUserReply(userId);

@@ -87,7 +87,108 @@ function doPost(e) {
   }
 }
 
-// GET handler for testing
+// GET handler — handles both testing and Calendar booking actions
 function doGet(e) {
-  return ContentService.createTextOutput('JIA Lead Sheet Webhook is active');
+  var params = e.parameter;
+
+  // ---- Google Calendar Booking ----
+  // Called by api/lib/calendar.js with action=createBooking
+  if (params.action === 'createBooking') {
+    try {
+      var calendarId = 'primary'; // หรือใส่ Calendar ID เฉพาะของ JIA
+      var cal = CalendarApp.getCalendarById(calendarId) || CalendarApp.getDefaultCalendar();
+
+      var name = params.name || 'ลูกค้า';
+      var phone = params.phone || '';
+      var courseType = params.courseType || 'CPR Savelife';
+      var dateStr = params.date || '';  // YYYY-MM-DD
+      var timeStr = params.time || '09:00'; // HH:MM
+      var note = params.note || '';
+      var platform = params.platform || 'bot';
+
+      if (!dateStr) {
+        return ContentService.createTextOutput(JSON.stringify({
+          success: false, message: 'ไม่ระบุวันที่'
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+
+      // Build start/end datetime
+      var parts = dateStr.split('-');
+      var timeParts = timeStr.split(':');
+      var startDate = new Date(
+        parseInt(parts[0]),
+        parseInt(parts[1]) - 1,
+        parseInt(parts[2]),
+        parseInt(timeParts[0]),
+        parseInt(timeParts[1] || 0)
+      );
+      var endDate = new Date(startDate.getTime() + 3.5 * 60 * 60 * 1000); // +3.5 ชม.
+
+      var title = '[' + courseType + '] ' + name;
+      var description =
+        'ชื่อ: ' + name + '\n' +
+        'เบอร์โทร: ' + phone + '\n' +
+        'คอร์ส: ' + courseType + '\n' +
+        'แหล่งที่มา: ' + platform + '\n' +
+        (note ? 'หมายเหตุ: ' + note : '');
+
+      var event = cal.createEvent(title, startDate, endDate, {
+        description: description,
+        location: 'The Street Ratchada ชั้น 3, MRT ศูนย์วัฒนธรรม',
+      });
+
+      // Also log to Bookings sheet
+      try {
+        var ss = SpreadsheetApp.getActiveSpreadsheet();
+        var bookSheet = ss.getSheetByName('Bookings') || ss.insertSheet('Bookings');
+        if (bookSheet.getLastRow() === 0) {
+          bookSheet.appendRow(['วันที่จอง', 'วันเรียน', 'เวลา', 'ชื่อ', 'เบอร์', 'คอร์ส', 'ช่องทาง', 'Event ID']);
+          bookSheet.getRange(1, 1, 1, 8).setFontWeight('bold');
+        }
+        bookSheet.appendRow([
+          new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }),
+          dateStr, timeStr, name, phone, courseType, platform, event.getId()
+        ]);
+      } catch(sheetErr) {
+        Logger.log('Booking sheet error: ' + sheetErr);
+      }
+
+      // Send notification email
+      try {
+        MailApp.sendEmail({
+          to: 'jiacpr@gmail.com',
+          subject: '📅 จองคอร์สใหม่ — ' + name + ' (' + courseType + ')',
+          body: 'มีการจองคอร์สใหม่จากบอทค่ะ!\n\n' +
+                'ชื่อ: ' + name + '\n' +
+                'เบอร์โทร: ' + phone + '\n' +
+                'คอร์ส: ' + courseType + '\n' +
+                'วัน-เวลา: ' + dateStr + ' ' + timeStr + '\n' +
+                'ช่องทาง: ' + platform + '\n\n' +
+                'ดู Calendar: https://calendar.google.com'
+        });
+      } catch(emailErr) {
+        Logger.log('Email error: ' + emailErr);
+      }
+
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        eventId: event.getId(),
+        eventLink: 'https://calendar.google.com',
+        message: 'จองสำเร็จค่ะ!'
+      })).setMimeType(ContentService.MimeType.JSON);
+
+    } catch(calErr) {
+      Logger.log('Calendar error: ' + calErr);
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false, message: 'ระบบจองขัดข้อง: ' + calErr.message
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
+  // Default: health check
+  return ContentService.createTextOutput(JSON.stringify({
+    status: 'active',
+    service: 'JIA Chatbot Webhook',
+    endpoints: ['POST /?action=logLead', 'GET /?action=createBooking']
+  })).setMimeType(ContentService.MimeType.JSON);
 }
