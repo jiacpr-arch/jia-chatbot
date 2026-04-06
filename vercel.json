@@ -3,6 +3,9 @@
   "routes": [
     { "src": "/api/messenger", "dest": "/api/messenger.js" },
     { "src": "/api/line", "dest": "/api/line.js" },
+    { "src": "/api/roodee", "dest": "/api/roodee.js" },
+    { "src": "/api/morroo", "dest": "/api/morroo.js" },
+    { "src": "/api/pharmru", "dest": "/api/pharmru.js" },
     { "src": "/api/test", "dest": "/api/test.js" },
     { "src": "/api/leadgen", "dest": "/api/leadgen.js" },
     { "src": "/api/cron/follow-up", "dest": "/api/cron/follow-up.js" },
