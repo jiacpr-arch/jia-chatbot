@@ -11,7 +11,7 @@ const HISTORY_TTL_MS = 30 * 60 * 1000; // 30 นาที
 const MAX_HISTORY_MESSAGES = 20; // เก็บไว้ 20 ข้อความล่าสุด
 
 const MODEL_HAIKU = 'claude-haiku-5-5';
-const MODEL_SONNET = 'claude-sonnet-4-6-20250520';
+const MODEL_SONNET = 'claude-sonnet-5-5';
 
 // จำนวนข้อความขั้นต่ำที่จะสลับไป Sonnet (ลูกค้าคุยจริงจัง)
 const SONNET_THRESHOLD_MESSAGES = 3;
