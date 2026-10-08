@@ -10,7 +10,7 @@ const conversationHistory = new Map();
 const HISTORY_TTL_MS = 30 * 60 * 1000; // 30 นาที
 const MAX_HISTORY_MESSAGES = 20; // เก็บไว้ 20 ข้อความล่าสุด
 
-const MODEL_HAIKU = 'claude-haiku-4-5-20251001';
+const MODEL_HAIKU = 'claude-haiku-5-5';
 const MODEL_SONNET = 'claude-sonnet-4-6-20250520';
 
 // จำนวนข้อความขั้นต่ำที่จะสลับไป Sonnet (ลูกค้าคุยจริงจัง)
