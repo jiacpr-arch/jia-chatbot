@@ -11,7 +11,7 @@ const HISTORY_TTL_MS = 30 * 60 * 1000; // 30 นาที
 const MAX_HISTORY_MESSAGES = 20; // เก็บไว้ 20 ข้อความล่าสุด
 
 const MODEL_HAIKU = 'claude-haiku-5-5';
-const MODEL_SONNET = 'claude-sonnet-4-6-20250520';
+const MODEL_SONNET = 'claude-sonnet-5-5';
 
 // จำนวนข้อความขั้นต่ำที่จะสลับไป Sonnet (ลูกค้าคุยจริงจัง)
 const SONNET_THRESHOLD_MESSAGES = 3;
@@ -69,12 +69,23 @@ async function getAIResponse(userId, userMessage, leadLevel) {
 
   const response = await client.messages.create({
     model,
-    max_tokens: model === MODEL_SONNET ? 700 : 500,
+    // Haiku 5.5 / Sonnet 5.5 think before answering; low effort keeps chat
+    // replies quick, and the headroom keeps thinking from eating the reply.
+    max_tokens: model === MODEL_SONNET ? 2000 : 1500,
+    output_config: { effort: 'low' },
     system: SYSTEM_PROMPT,
     messages,
   });
 
-  const assistantMessage = response.content[0].text;
+  // content[0] can be a thinking block, so join the text blocks instead.
+  const assistantMessage = response.content
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text)
+    .join('')
+    .trim();
+  if (!assistantMessage) {
+    throw new Error(`[AI] empty reply (stop_reason: ${response.stop_reason})`);
+  }
 
   // บันทึกประวัติ (ไม่เก็บแท็ก HANDOFF ใน history)
   const cleanMessage = assistantMessage.replace(/\[HANDOFF:[A-Z_]+\]/g, '').trim();
